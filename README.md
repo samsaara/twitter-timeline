@@ -9,7 +9,8 @@ In addition:
 * Remove the fields from the JSON response that you don't think are useful before storing them.
 
 # Requirements:
- Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info. 
+* Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info. 
+* Store your `API Key and API secret` as raw strings on 2 separate lines in a file (default `.credentials`)
 
  Do `pip install -r requirements.txt`
 
