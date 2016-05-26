@@ -65,7 +65,8 @@ def get_access_token():
 class Crawler:
 
     def __init__(self, screen_names=[], user_ids=[], count=200, trim_user=True, exclude_replies=True,
-                    contributor_details=False, include_rts=False, db='twitter', port=27017, host='localhost', collection='timeline', pref_langs=['en', 'no', 'nn', 'nb']):
+                    contributor_details=False, include_rts=False, db='twitter', port=27017, host='localhost',
+                    collection='timeline', pref_langs=['en', 'no', 'nn', 'nb']):
 
         self.screen_names = screen_names
         self.user_ids = user_ids
