@@ -191,9 +191,7 @@ class Crawler:
 
 
     def crawl(self, exclude_fields=None):
-        """ Efficient crawl for twitter timelines.
-            Pass fields in 'exclude_fields' to remove them from returned JSON response from Twitter
-        """
+        """ Efficient crawl for twitter timelines. """
 
         # small hack to make the function call compatible with either of the params...
         if self.screen_names:
