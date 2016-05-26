@@ -9,13 +9,13 @@ In addition:
 
 # Requirements:
  Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info. 
- 
+
  Do `pip install -r requirements.txt`
- 
+
 # Usage:
-* ` $ python crawl_timelines.py --names 'elonmusk' `
-* ` $ python crawl_timelines.py --names 'isro, sachin_rt' --lang 'en, hi'`
-* ` $ python crawl_timelines.py --ids '2916305152, 20536157' --noFields 'geo, favorited, place' `
+* ` $ python3 crawl_timelines.py --names 'elonmusk' `
+* ` $ python3 crawl_timelines.py --names 'isro, sachin_rt' --lang 'en, hi'`
+* ` $ python3 crawl_timelines.py --ids '2916305152, 20536157' --noFields 'geo, favorited, place' `
 
 # License:
 
