@@ -337,7 +337,8 @@ if __name__ == "__main__":
 
     try:
         crawler = Crawler(screen_names=args.names, user_ids=args.ids, trim_user=args.noTrim,
-                            exclude_replies=args.noExReps, contributor_details=args.contrib, include_rts=args.retweets, db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang)
+                        exclude_replies=args.noExReps, contributor_details=args.contrib, include_rts=args.retweets,
+                        db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang)
 
         crawler.crawl(exclude_fields=args.noFields)
 
