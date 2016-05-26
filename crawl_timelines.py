@@ -333,6 +333,12 @@ if __name__ == "__main__":
 
     if args.noFields:
         args.noFields = [field.strip() for field in args.noFields.strip().split(',') if len(field)]
+    else:
+        args.noFields = ['contributors', 'coordinates', 'extended_entities', 'favorite_count', 'favorited',
+                            'geo', 'id_str', 'in_reply_to_screen_name', 'place', 'in_reply_to_status_id',
+                            'in_reply_to_status_id_str', 'in_reply_to_user_id', 'in_reply_to_user_id_str',
+                            'is_quote_status', 'possibly_sensitive', 'retweet_count', 'retweeted', 'source'
+                        ]
 
     try:
         crawler = Crawler(screen_names=args.names, user_ids=args.ids, trim_user=args.noTrim,
