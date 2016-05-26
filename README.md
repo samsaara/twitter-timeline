@@ -4,7 +4,7 @@ Simple Python Twitter crawler for user timelines
 Supports all options from the official [Twitter API](https://dev.twitter.com/rest/reference/get/statuses/user_timeline) documentation.
 
 In addition:
-* Needs **Application-only** authentication - So no need of `Access Token & Secret`. Requests are also higher. See [here](https://dev.twitter.com/oauth/application-only) for more info.
+* Uses just **Application-only** authentication - So no need of `Access Token & Secret`. Rate limits are also higher. See [here](https://dev.twitter.com/oauth/application-only) for more info.
 * you can also crawl only those tweets in the languages you prefer based on [ISO 639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) codes.
 * Remove the fields from the JSON response that you don't think are useful before storing them.
 
