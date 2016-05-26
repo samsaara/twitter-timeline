@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
-__author__ = 'Vivek Vaddina'
+__author__ = 'Vaddina'
 
 import argparse
 import base64
 import time
-import json
+import ujson
 import urllib
 import urllib.request
 
@@ -54,7 +54,7 @@ def get_access_token():
         log.debug('fetching bearer token...')
         with urllib.request.urlopen(req) as op:
             resp = op.read()
-        access_token = json.loads(resp.decode('utf8'))['access_token']
+        access_token = ujson.loads(resp.decode('utf8'))['access_token']
         return access_token
 
     except:
@@ -105,7 +105,7 @@ class Crawler:
             log.exception('Error in getting the rate limits !!!')
             return None
 
-        resp = json.loads(resp.decode('utf8'))
+        resp = ujson.loads(resp.decode('utf8'))
 
         timeline_limits = resp['resources']['statuses']['/statuses/user_timeline']
         rem_hits, reset_time = timeline_limits.get('remaining'), timeline_limits.get('reset')
@@ -258,6 +258,7 @@ class Crawler:
                 sleep = reset_time - time.time()
                 wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
                 log.debug('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
+                # Sleep for one more second to wait for the reset of the limits
                 time.sleep(sleep+1)
                 rem_hits, reset_time = self.check_rate_limit_status()
 
@@ -292,6 +293,7 @@ class Crawler:
 
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--names", help='screen_names separated by "," (this or "--ids" option is mandatory). Takes precedence over "--ids"')
     parser.add_argument("-i", "--ids", help='user_ids separated by "," (this or "--names" option is mandatory)')
@@ -333,22 +335,11 @@ if __name__ == "__main__":
     if args.noFields:
         args.noFields = [field.strip() for field in args.noFields.strip().split(',') if len(field)]
 
-    # log.debug('\n\n names: {}, ids: {}, count: {}, noTrim: {}, noExReps: {}, contrib: {}, retweets: {}, host: {}, port: {}, db: {}, collection: {}, lang: {}'.format(args.names, args.ids, args.count, args.noTrim, args.noExReps, args.contrib, args.retweets, args.host, args.port, args.db, args.collection, args.lang))
-
     try:
         crawler = Crawler(screen_names=args.names, user_ids=args.ids, trim_user=args.noTrim,
                             exclude_replies=args.noExReps, contributor_details=args.contrib, include_rts=args.retweets, db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang)
 
-
-        # remove_fields = ['contributors', 'coordinates', 'extended_entities', 'favorite_count', 'favorited',
-        #                     'geo', 'id_str', 'in_reply_to_screen_name', 'place', 'in_reply_to_status_id',
-        #                     'in_reply_to_status_id_str', 'in_reply_to_user_id', 'in_reply_to_user_id_str',
-        #                     'is_quote_status', 'possibly_sensitive', 'retweet_count', 'retweeted', 'source'
-        #                 ]
         crawler.crawl(exclude_fields=args.noFields)
-
-        # crawler.crawl(exclude_fields=[])
-
 
     except:
         log.exception('Error !!! Closing down DB connections, if any..')
