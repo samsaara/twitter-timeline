@@ -1,0 +1,5 @@
+python>=3.4
+pandas
+pymongo
+
+ujson       # optional: If don't need this, replace 'ujson' with 'json' in code.
