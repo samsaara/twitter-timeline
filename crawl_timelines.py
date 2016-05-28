@@ -11,7 +11,7 @@ import urllib.request
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
 
-from utils import get_access_token, strip_entities, get_top_twitteratis
+from utils import Util
 
 import pandas as pd
 pd.set_option('display.expand_frame_repr', False)
@@ -22,9 +22,6 @@ logging.basicConfig(filename="crawler.log", level=logging.DEBUG,
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
-API_VERSION = '1.1'
-BASE_URL = 'https://api.twitter.com/{}'.format(API_VERSION)
-TIMELINE_URL = '{}/statuses/user_timeline.json'.format(BASE_URL)
 
 
 class Crawler:
@@ -43,7 +40,7 @@ class Crawler:
         self.pref_langs = pref_langs
         self.exclude_fields = exclude_fields
 
-        self.ACCESS_TOKEN = get_access_token()
+        self.util = Util()
 
         try:
             self.client = MongoClient(host, port)
@@ -61,26 +58,6 @@ class Crawler:
     def check_rate_limit_status(self):
         """ returns the remaining number of calls and the reset time of the counter """
 
-        url = '{}/application/rate_limit_status.json?resources=statuses'.format(BASE_URL)
-        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
-        header = {'Authorization': auth}
-        req = urllib.request.Request(url, headers=header)
-
-        resp = None
-        try:
-            log.debug('fetching rate_limit_status...')
-            with urllib.request.urlopen(req) as op:
-                resp = op.read()
-        except:
-            log.exception('Error in getting the rate limits !!!')
-            return None
-
-        resp = ujson.loads(resp.decode('utf8'))
-
-        timeline_limits = resp['resources']['statuses']['/statuses/user_timeline']
-        rem_hits, reset_time = timeline_limits.get('remaining'), timeline_limits.get('reset')
-
-        return rem_hits, reset_time
 
 
     def _get_timeline(self, screen_name=None, user_id=None):
@@ -107,9 +84,9 @@ class Crawler:
         params += '&contributor_details={}'.format(str(self.contributor_details).lower())
         params += '&include_rts={}'.format(str(self.include_rts).lower())
 
-        full_timeline_url = TIMELINE_URL + params
+        full_timeline_url = self.util.TIMELINE_URL + params
         # log.debug("\nquery: \n{}\n".format(full_timeline_url))
-        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
+        auth = 'Bearer {}'.format(self.util.ACCESS_TOKEN)
         header = {'Authorization': auth}
         req = urllib.request.Request(full_timeline_url, headers=header)
 
@@ -184,7 +161,7 @@ class Crawler:
 
             # if 'entities' in self.df.columns:
                 # strip entities
-            self.df.entities = self.df.entities.apply(lambda x: strip_entities(x))
+            self.df.entities = self.df.entities.apply(lambda x: self.util.strip_entities(x))
             self.df.user = self.df.user.apply(lambda x: x.get('id'))
 
             # if 'id_str' in self.df.columns:
@@ -223,7 +200,7 @@ class Crawler:
         screen_name, user_id = next(generate_user)
 
         self.max_id, self.since_id = None, self.get_since_id(screen_name, user_id)
-        rem_hits, reset_time = self.check_rate_limit_status()
+        rem_hits, reset_time = self.util.check_rate_limit_status()
         while time.time() < reset_time:
             if rem_hits > 0:
                 resp = self._get_timeline(screen_name, user_id)
@@ -246,7 +223,7 @@ class Crawler:
                 time.sleep(.01)
 
             else:
-                interm_hits, interm_time = self.check_rate_limit_status()
+                interm_hits, interm_time = self.util.check_rate_limit_status()
                 if interm_time > reset_time:
                     rem_hits, reset_time = interm_hits, interm_time
                 else:
@@ -255,7 +232,7 @@ class Crawler:
                     log.debug('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
                     # Sleep for one more second to wait for the reset of the limits
                     time.sleep(sleep+1)
-                    rem_hits, reset_time = self.check_rate_limit_status()
+                    rem_hits, reset_time = self.util.check_rate_limit_status()
 
         log.debug('exiting...\n\n')
 
