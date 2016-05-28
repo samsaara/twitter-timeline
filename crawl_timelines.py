@@ -88,6 +88,9 @@ class Crawler:
 
         self.db = self.client[db]
         self.collection = self.db[collection]
+        if db in self.client.database_names() and collection in self.db.collection_names():
+            if 'created_at_1' not in self.collection.index_information().keys():
+                self.collection.create_index('created_at')
 
 
     def check_rate_limit_status(self):
@@ -161,13 +164,13 @@ class Crawler:
     def store_in_db(self):
         """ Stores fetched & preprocessed tweets in DB """
 
-        if 'created_at' in self.dfColumns:
-            self.collection.create_index('created_at')
-
         try:
             self.collection.insert_many(self.dfJson, ordered=False)
         except BulkWriteError:
             log.warning('some rows seem to already exist.. not updating them...')
+
+        if 'created_at_1' not in self.collection.index_information().keys():
+            self.collection.create_index('created_at')
 
         log.debug('successfully stored in DB !!!')
         return
