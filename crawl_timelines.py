@@ -66,7 +66,7 @@ class Crawler:
 
     def __init__(self, screen_names=[], user_ids=[], count=200, trim_user=True, exclude_replies=True,
                     contributor_details=False, include_rts=False, db='twitter', port=27017, host='localhost',
-                    collection='timeline', pref_langs=['en', 'no', 'nn', 'nb']):
+                    collection='timeline', pref_langs=['en', 'no', 'nn', 'nb'], exclude_fields=None):
 
         self.screen_names = screen_names
         self.user_ids = user_ids
@@ -76,6 +76,7 @@ class Crawler:
         self.contributor_details = contributor_details
         self.include_rts = include_rts
         self.pref_langs = pref_langs
+        self.exclude_fields = exclude_fields
 
         self.ACCESS_TOKEN = get_access_token()
 
@@ -337,13 +338,15 @@ if __name__ == "__main__":
         args.noFields = ['contributors', 'coordinates', 'extended_entities', 'favorite_count', 'favorited',
                             'geo', 'id_str', 'in_reply_to_screen_name', 'place', 'in_reply_to_status_id',
                             'in_reply_to_status_id_str', 'in_reply_to_user_id', 'in_reply_to_user_id_str',
-                            'is_quote_status', 'possibly_sensitive', 'retweet_count', 'retweeted', 'source'
+                            'is_quote_status', 'possibly_sensitive', 'retweet_count', 'retweeted', 'source',
+                            'quoted_status', 'quoted_status_id', 'quoted_status_id_str',
                         ]
 
     try:
         crawler = Crawler(screen_names=args.names, user_ids=args.ids, trim_user=args.noTrim,
                         exclude_replies=args.noExReps, contributor_details=args.contrib, include_rts=args.retweets,
-                        db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang)
+                        db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang,
+                        exclude_fields=args.noFields)
 
         crawler.crawl(exclude_fields=args.noFields)
 
