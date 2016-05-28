@@ -255,12 +255,16 @@ class Crawler:
                 time.sleep(.01)
 
             else:
-                sleep = reset_time - time.time()
-                wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
-                log.debug('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
-                # Sleep for one more second to wait for the reset of the limits
-                time.sleep(sleep+1)
-                rem_hits, reset_time = self.check_rate_limit_status()
+                interm_hits, interm_time = self.check_rate_limit_status()
+                if interm_time > reset_time:
+                    rem_hits, reset_time = interm_hits, interm_time
+                else:
+                    sleep = interm_time - time.time()
+                    wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                    log.debug('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
+                    # Sleep for one more second to wait for the reset of the limits
+                    time.sleep(sleep+1)
+                    rem_hits, reset_time = self.check_rate_limit_status()
 
         log.debug('exiting...')
 
