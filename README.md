@@ -9,10 +9,15 @@ In addition:
 * Remove the fields from the JSON response that you don't think are useful before storing them.
 
 # Requirements:
-* Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info. 
+* Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info.
 * Store your `API Key and API secret` as raw strings on 2 separate lines in a file (default `.credentials`)
 
  Do `pip install -r requirements.txt`
+
+
+# Note:
+This 'test' branch is a bit more advanced and has more functionalities (like automatically fetching users, and their followers etc.)... and is more suited for my needs. I don't plan to include all of these in 'master' but might incorporate some of the stuff from this into it. For now, feel free to tweak around. :)
+
 
 # Usage:
 * ` $ python3 crawl_timelines.py --names 'elonmusk' `
