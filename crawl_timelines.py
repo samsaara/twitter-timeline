@@ -54,10 +54,16 @@ class Crawler:
             if 'created_at_1' not in self.collection.index_information().keys():
                 self.collection.create_index('created_at')
 
+        # temporary buffer collection to store the user names/ids
+        self.buffer_col = self.db['buffer']
 
     def check_rate_limit_status(self):
         """ returns the remaining number of calls and the reset time of the counter """
+        # Collection to store the user_ids to crawl
+        self.to_crawl = self.db['to_crawl']
 
+        # collection to store the user_ids of the people whose timelines are crawled.
+        self.crawled = self.db['crawled']
 
 
     def _get_timeline(self, screen_name=None, user_id=None):
