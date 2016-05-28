@@ -122,7 +122,7 @@ class Crawler:
             return None
 
 
-    def clean_response_store(self):
+    def _clean_response(self, screen_name):
         """ removes unnecessary fields and formats the data - fit to feed in DB """
 
         # log.debug('len(self.df): {}'.format(len(self.df)))
@@ -159,9 +159,10 @@ class Crawler:
             self.df = self.df.to_dict(orient='records')
             self.last_user_id = self.df.user.iloc[0]
 
-            self.store_in_db()
+            return True
         else:
             log.warning('no tweets found in preferred language...')
+            return False
 
 
     def crawl(self, top_users=False, followers=False):
@@ -194,8 +195,8 @@ class Crawler:
 
                 if resp != '[]' and resp is not None:
                     self.df = pd.read_json(resp)
-                    self.clean_response_store()
-
+                    store = self._clean_response(screen_name)
+                    self.store_in_db() if store else None
                 else:
                     try:
                         screen_name, user_id = next(generate_user)
