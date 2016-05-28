@@ -9,7 +9,7 @@ In addition:
 * Remove the fields from the JSON response that you don't think are useful before storing them.
 
 # Note:
-There's a 'test' branch with more advanced options. Read [this](https://github.com/vaddina/twitter-timeline/blob/test/README.md#note).
+There's a `test` branch with more advanced options and features. Read [this](https://github.com/vaddina/twitter-timeline/blob/test/README.md#note) if you want to know more.
 
 # Requirements:
 * Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info. 
