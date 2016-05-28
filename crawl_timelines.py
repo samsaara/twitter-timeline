@@ -3,7 +3,6 @@
 __author__ = 'Vaddina'
 
 import argparse
-import base64
 import time
 import ujson
 import urllib
@@ -11,6 +10,8 @@ import urllib.request
 
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
+
+from utils import get_access_token, strip_entities, get_top_twitteratis
 
 import pandas as pd
 pd.set_option('display.expand_frame_repr', False)
@@ -22,44 +23,8 @@ log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
 API_VERSION = '1.1'
-TOKEN_URL = 'https://api.twitter.com/oauth2/token'
 BASE_URL = 'https://api.twitter.com/{}'.format(API_VERSION)
 TIMELINE_URL = '{}/statuses/user_timeline.json'.format(BASE_URL)
-
-
-def get_credentials(filename='.credentials'):
-    """ Loads API's Key & Secret """
-
-    log.debug('loading app credentials...')
-    with open(filename) as fl:
-        contents = fl.read()
-
-    api_key, api_secret, *k = contents.split('\n')
-
-    return api_key, api_secret
-
-
-def get_access_token():
-    """ Gets bearer (access) token for crawling the timelines """
-
-    api_key, api_secret = get_credentials()
-    b64enc = base64.b64encode('{}:{}'.format(api_key, api_secret).encode('ascii'))
-    auth = 'Basic {}'.format(b64enc.decode('utf-8'))
-    data = urllib.parse.urlencode({'grant_type':'client_credentials'}).encode('utf-8')
-    headers = {'Authorization': auth,
-                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'}
-    req = urllib.request.Request(TOKEN_URL, headers=headers, data=data)
-
-    try:
-        log.debug('fetching bearer token...')
-        with urllib.request.urlopen(req) as op:
-            resp = op.read()
-        access_token = ujson.loads(resp.decode('utf8'))['access_token']
-        return access_token
-
-    except:
-        log.exception("Error fetching the bearer token. Re-check app's credentials !!!")
-        return None
 
 
 class Crawler:
@@ -165,7 +130,7 @@ class Crawler:
         """ Stores fetched & preprocessed tweets in DB """
 
         try:
-            self.collection.insert_many(self.dfJson, ordered=False)
+            self.collection.insert_many(self.df, ordered=False)
         except BulkWriteError:
             log.warning('some rows seem to already exist.. not updating them...')
 
@@ -194,14 +159,65 @@ class Crawler:
             return None
 
 
-    def crawl(self, exclude_fields=None):
+    def clean_response_store(self):
+        """ removes unnecessary fields and formats the data - fit to feed in DB """
+
+        # log.debug('len(self.df): {}'.format(len(self.df)))
+        self.max_id = self.df.id.min() - 1
+
+        if self.pref_langs:
+            # Extract only those tweets that are in one of preferred languages...
+            self.df = self.df[self.df.lang.isin(self.pref_langs)]
+
+        if len(self.df):
+            if screen_name:
+                self.df['screen_name'] = screen_name
+
+            # *** WARNING: Uncomment this when appropriate... Currently commented to increase speed. ***
+
+            # if self.exclude_fields:
+            #     if 'id' in self.exclude_fields:
+            #         log.warning("can't remove ID field. Required for efficient crawling !!!")
+            #         self.exclude_fields.remove('id')
+            rem_fields = list(set(self.df.columns) - set(self.exclude_fields))
+            self.df = self.df.get(rem_fields)
+
+            # if 'entities' in self.df.columns:
+                # strip entities
+            self.df.entities = self.df.entities.apply(lambda x: strip_entities(x))
+            self.df.user = self.df.user.apply(lambda x: x.get('id'))
+
+            # if 'id_str' in self.df.columns:
+            #     self.df.id_str = self.df.id_str.astype(str)
+
+            self.df.rename(columns={'id':'_id'}, inplace=True)
+            log.debug('Got {} tweets'.format(len(self.df)))
+
+            self.df = self.df.to_dict(orient='records')
+            self.last_user_id = self.df.user.iloc[0]
+
+            self.store_in_db()
+        else:
+            log.warning('no tweets found in preferred language...')
+
+
+    def crawl(self, top_users=False, followers=False):
         """ Efficient crawl for twitter timelines. """
 
         # small hack to make the function call compatible with either of the params...
         if self.screen_names:
             self.user_ids = [None] * len(self.screen_names)
-        else:
+        elif self.user_ids:
             self.screen_names = [None] * len(self.user_ids)
+        elif self.top_users:
+            self.screen_names = get_top_twitteratis()
+            self.user_ids = [None] * len(self.screen_names)
+        elif followers:
+            pass
+        else:
+            log.warning('nothing to crawl... specify options...')
+            return
+
 
         generate_user = self._create_generator()
         screen_name, user_id = next(generate_user)
@@ -214,36 +230,8 @@ class Crawler:
                 rem_hits -= 1
 
                 if resp != '[]' and resp is not None:
-                    df = pd.read_json(resp)
-                    # log.debug('len(df): {}'.format(len(df)))
-                    self.max_id = df.id.min() - 1
-
-                    if self.pref_langs:
-                        # Extract only those tweets that are in one of preferred languages...
-                        df = df[df.lang.isin(self.pref_langs)]
-
-                    if len(df):
-                        if screen_name:
-                            df['screen_name'] = screen_name
-
-                        if exclude_fields:
-                            if 'id' in exclude_fields:
-                                log.warning("can't remove ID field. Required for efficient crawling !!!")
-                                exclude_fields.remove('id')
-                            rem_fields = list(set(df.columns) - set(exclude_fields))
-                            df = df.get(rem_fields)
-                        if 'id_str' in df.columns:
-                            df.id_str = df.id_str.astype(str)
-
-                        df.rename(columns={'id':'_id'}, inplace=True)
-                        self.dfColumns = df.columns
-
-                        log.debug('Got {} tweets, max_id: {}'.format(len(df), self.max_id))
-
-                        self.dfJson = df.to_dict(orient='records')
-                        self.store_in_db()
-                    else:
-                        log.warning('no tweets found in preferred language...')
+                    self.df = pd.read_json(resp)
+                    self.clean_response_store()
 
                 else:
                     try:
@@ -269,7 +257,7 @@ class Crawler:
                     time.sleep(sleep+1)
                     rem_hits, reset_time = self.check_rate_limit_status()
 
-        log.debug('exiting...')
+        log.debug('exiting...\n\n')
 
 
     def drop_collection(self):
@@ -326,18 +314,20 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    if not (args.names or args.ids):
-        parser.error('Need either "screen_names" or "user_ids" to crawl the timeline of.')
+    # if not (args.names or args.ids):
+    #     parser.error('Need either "screen_names" or "user_ids" to crawl the timeline of.')
 
     if args.names:
         args.names = [name.strip() for name in args.names.strip().split(',') if len(name)]
         args.ids = []
-    else:
+    elif args.ids:
         args.ids = [abs(int(_id)) for _id in args.ids.split(',')]
         args.names = []
 
     if args.lang:
         args.lang = [lang.strip() for lang in args.lang.strip().split(',') if len(lang)]
+    else:
+        args.lang = ['en, no, nn, nb']
 
     if args.noFields:
         args.noFields = [field.strip() for field in args.noFields.strip().split(',') if len(field)]
@@ -355,7 +345,7 @@ if __name__ == "__main__":
                         db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang,
                         exclude_fields=args.noFields)
 
-        crawler.crawl(exclude_fields=args.noFields)
+        crawler.crawl(top_users=False, followers=False)
 
     except:
         log.exception('Error !!! Closing down DB connections, if any..')
