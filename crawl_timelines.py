@@ -223,8 +223,6 @@ class Crawler:
         log.debug('exiting...\n\n')
 
 
-    def drop_collection(self):
-        log.warning('request received to drop Collection "{}"...'.format(self.collection.name))
     def store_in_db(self):
         """ Stores fetched & preprocessed tweets in DB """
 
