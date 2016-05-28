@@ -2,11 +2,10 @@
 """ core utils """
 
 import base64
+import pandas as pd
 import urllib
 import urllib.request
 import ujson
-
-from bs4 import BeautifulSoup as bs
 
 import logging
 logging.basicConfig(filename="crawler.log", level=logging.DEBUG,
@@ -14,93 +13,139 @@ logging.basicConfig(filename="crawler.log", level=logging.DEBUG,
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
-TOKEN_URL = 'https://api.twitter.com/oauth2/token'
 
-def get_credentials(filename='.credentials'):
-    """ Loads API's Key & Secret """
+class Util:
 
-    log.debug('loading app credentials...')
-    with open(filename) as fl:
-        contents = fl.read()
+    def __init__(self, credentials_file = '.credentials'):
+        self.API_VERSION = '1.1'
+        self.BASE_URL = 'https://api.twitter.com/{}'.format(self.API_VERSION)
+        self.TOKEN_URL = 'https://api.twitter.com/oauth2/token'
+        self.TIMELINE_URL = '{}/statuses/user_timeline.json'.format(self.BASE_URL)
 
-    api_key, api_secret, *k = contents.split('\n')
-
-    return api_key, api_secret
+        self.ACCESS_TOKEN = self.get_access_token(credentials_file)
 
 
-def get_access_token():
-    """ Gets bearer (access) token for crawling the timelines """
+    def get_credentials(self, credentials_file):
+        """ Loads API's Key & Secret """
 
-    api_key, api_secret = get_credentials()
-    b64enc = base64.b64encode('{}:{}'.format(api_key, api_secret).encode('ascii'))
-    auth = 'Basic {}'.format(b64enc.decode('utf-8'))
-    data = urllib.parse.urlencode({'grant_type':'client_credentials'}).encode('utf-8')
-    headers = {'Authorization': auth,
-                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'}
-    req = urllib.request.Request(TOKEN_URL, headers=headers, data=data)
+        log.debug('loading app credentials...')
+        with open(credentials_file) as fl:
+            contents = fl.read()
 
-    try:
-        log.debug('fetching bearer token...')
-        with urllib.request.urlopen(req) as op:
-            resp = op.read()
-        access_token = ujson.loads(resp.decode('utf8'))['access_token']
-        return access_token
+        api_key, api_secret, *k = contents.split('\n')
 
-    except:
-        log.exception("Error fetching the bearer token. Re-check app's credentials !!!")
-        return None
+        return api_key, api_secret
 
 
-def strip_entities(ent={}):
-    """ Strip all the stuff except "indices" from the 'entities' in a JSON response from twitter """
+    def get_access_token(self, credentials_file):
+        """ Gets bearer (access) token for crawling the timelines """
 
-    dc = {}
-    for key in ent.keys():
-        vals = ent.get(key)
-        if vals:
-            indices = []
-            for i in vals:
-                indices.append(i['indices'])
-            dc[key] = indices
-        else:
-            dc[key] = []
+        api_key, api_secret = self.get_credentials(credentials_file)
+        b64enc = base64.b64encode('{}:{}'.format(api_key, api_secret).encode('ascii'))
+        auth = 'Basic {}'.format(b64enc.decode('utf-8'))
+        data = urllib.parse.urlencode({'grant_type':'client_credentials'}).encode('utf-8')
+        headers = {'Authorization': auth,
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'}
+        req = urllib.request.Request(self.TOKEN_URL, headers=headers, data=data)
 
-    return dc
-
-
-def get_top_twitteratis(url="http://tvitre.no/norsktoppen"):
-    """ Gets the top 1000 users from http://tvitre.no/norsktoppen """
-
-    user_agent = "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7"
-    hdr = {'User-Agent': user_agent}
-    twitteratis = []
-
-    def _collect_usernames(url):
-        log.debug("Searching for usernames on page: {}".format(url))
         try:
-            website = urllib.request.urlopen(urllib.request.Request(url, headers=hdr))
+            log.debug('fetching bearer token...')
+            with urllib.request.urlopen(req) as op:
+                resp = op.read()
+            access_token = ujson.loads(resp.decode('utf8'))['access_token']
+            return access_token
+
         except:
-            log.exception("error crawling for usernames on page: {}".format(url))
-            return -1
+            log.exception("Error fetching the bearer token. Re-check app's credentials !!!")
+            return None
 
-        content = website.read()
-        soup = bs(content, 'html.parser')
 
-        # Get twitteratis' usernames (they start with "@")
-        twitteratis.extend(list(filter(bool, [link.getText().lstrip('@') if link.getText().startswith('@')
-                                        else '' for link in soup.find_all('a')])))
+    def check_rate_limit_status(self, criteria='timeline'):
+        """ returns the remaining number of calls and the reset time of the counter for 'timeline / user_lookup' """
 
-        # Get the link to the next page
-        next_tag = soup.find_all("li", {"class": "next"})
-        if next_tag:
-            next_url = next_tag[0].find_all('a')[0].get('href')
-            url = urllib.parse.urljoin(url, next_url)
-            return _collect_usernames(url)
-        else:
-            return twitteratis
+        url = '{}/application/rate_limit_status.json?resources={}'.format(self.BASE_URL, 'statuses' if
+                                                                            criteria=='timeline' else 'users')
+        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
+        header = {'Authorization': auth}
+        req = urllib.request.Request(url, headers=header)
 
-    return _collect_usernames(url)
+        resp = None
+        try:
+            log.debug('fetching rate_limit_status...')
+            with urllib.request.urlopen(req) as op:
+                resp = op.read()
+        except:
+            log.exception('Error in getting the rate limits !!!')
+            return None
 
-# if __name__ == '__main__':
-#     twitteratis = get_top_twitteratis()
-#     print (twitteratis[:10])
+        resp = ujson.loads(resp.decode('utf8'))
+
+        if criteria == 'timeline':
+            limits = resp['resources']['statuses']['/statuses/user_timeline']
+        elif criteria == 'user_lookup':
+            limits = resp['resources']['users']['/users/lookup']
+
+        rem_hits, reset_time = limits.get('remaining'), limits.get('reset')
+
+        return rem_hits, reset_time
+
+
+    def strip_entities(self, ent={}):
+        """ Strip all the stuff except "indices" from the 'entities' in a JSON response from twitter """
+
+        dc = {}
+        for key in ent.keys():
+            vals = ent.get(key)
+            if vals:
+                indices = []
+                for i in vals:
+                    indices.append(i['indices'])
+                dc[key] = indices
+            else:
+                dc[key] = []
+
+        return dc
+
+
+
+
+    def get_top_twitteratis(self, url="http://tvitre.no/norsktoppen"):
+        """ Gets the top 1000 users from http://tvitre.no/norsktoppen """
+
+        from bs4 import BeautifulSoup as bs
+
+        user_agent = "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7"
+        hdr = {'User-Agent': user_agent}
+        twitteratis = []
+
+        def _collect_usernames(url):
+            log.debug("Searching for usernames on page: {}".format(url))
+            try:
+                website = urllib.request.urlopen(urllib.request.Request(url, headers=hdr))
+            except:
+                log.exception("error crawling for usernames on page: {}".format(url))
+                return -1
+
+            content = website.read()
+            soup = bs(content, 'html.parser')
+
+            # Get twitteratis' usernames (they start with "@")
+            twitteratis.extend(list(filter(bool, [link.getText().lstrip('@') if link.getText().startswith('@')
+                                            else '' for link in soup.find_all('a')])))
+
+            # Get the link to the next page
+            next_tag = soup.find_all("li", {"class": "next"})
+            if next_tag:
+                next_url = next_tag[0].find_all('a')[0].get('href')
+                url = urllib.parse.urljoin(url, next_url)
+                return _collect_usernames(url)
+            else:
+                return twitteratis
+
+        return _collect_usernames(url)
+
+if __name__ == '__main__':
+    pass
+    # ut = Util()
+    # twitteratis = get_top_twitteratis()
+    # print (twitteratis[:10])
