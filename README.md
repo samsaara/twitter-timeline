@@ -16,7 +16,7 @@ In addition:
 
 
 # Note:
-This 'test' branch is a bit more advanced and has more functionalities (like automatically fetching users, and their followers etc.)... and is more suited for my needs. I don't plan to include all of these in 'master' but might incorporate some of the stuff from this into it. For now, feel free to tweak around. :)
+This `test` branch is a bit more advanced and has (& will have) more functionalities (like automatically fetching users, and their followers & their tweets etc. and many more to come)... and is more suited for my needs. I don't plan to include all of these in 'master' anytime soon but might incorporate some of the stuff from this into it. For now, feel free to tweak around. :)
 
 
 # Usage:
