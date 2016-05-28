@@ -107,6 +107,27 @@ class Util:
         return dc
 
 
+    def get_user_ids(self, usernames):
+        """ Gets user_ids given list of screen_names """
+
+        url = '{}/users/lookup.json?screen_name={}'.format(self.BASE_URL, ','.join(usernames))
+        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
+        header = {'Authorization': auth}
+        req = urllib.request.Request(url, headers=header)
+
+        resp = None
+        try:
+            log.debug('fetching userids for the screen_names...')
+            with urllib.request.urlopen(req) as op:
+                resp = op.read()
+        except:
+            log.exception('Error in getting the rate limits !!!')
+            return None
+
+        df =  pd.read_json(resp.decode('utf8'))[['id', 'screen_name']]
+        df.rename(columns={'id':'_id'}, inplace=True)
+
+        return df.to_dict(orient='records')
 
 
     def get_top_twitteratis(self, url="http://tvitre.no/norsktoppen"):
@@ -147,5 +168,6 @@ class Util:
 if __name__ == '__main__':
     pass
     # ut = Util()
+    # print (ut.get_user_ids(['bakkenbaeck', 'Google']))
     # twitteratis = get_top_twitteratis()
     # print (twitteratis[:10])
