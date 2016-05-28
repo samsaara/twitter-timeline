@@ -239,24 +239,27 @@ class Crawler:
         log.debug('successfully stored in DB !!!')
         return
 
+
+    def drop_collection(self, collection):
+        log.warning('request received to drop Collection "{}"...'.format(collection))
         inp = None
         while inp not in ['yes', 'y', 'no', 'n']:
-            inp = input('\n Drop the collection "{}"? (yes/no): '.format(self.collection.name)).lower()
+            inp = input('\n Drop the collection "{}"? (yes/no): '.format(collection)).lower()
         if inp in ['y', 'yes']:
-            self.db.drop_collection(self.collection)
+            self.db.drop_collection(collection)
             print('Collection dropped !!!')
             log.warning('Collection dropped !!!')
         else:
             log.warning('Collection NOT dropped !!!')
 
 
-    def drop_database(self):
-        log.warning('request received to drop Database {}...'.format(self.db.name))
+    def drop_database(self, database):
+        log.warning('request received to drop Database {}...'.format(database))
         inp = None
         while inp not in ['yes', 'y', 'no', 'n']:
-            inp = input('\n Drop the Database "{}"? (yes/no): '.format(self.db.name)).lower()
+            inp = input('\n Drop the Database "{}"? (yes/no): '.format(database)).lower()
         if inp in ['y', 'yes']:
-            self.client.drop_database(self.db)
+            self.client.drop_database(database)
             print('Database dropped !!!')
             log.warning('Database dropped !!!')
         else:
