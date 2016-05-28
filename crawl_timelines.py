@@ -304,7 +304,7 @@ if __name__ == "__main__":
     if args.lang:
         args.lang = [lang.strip() for lang in args.lang.strip().split(',') if len(lang)]
     else:
-        args.lang = ['en, no, nn, nb']
+        args.lang = ['en', 'no', 'nn', 'nb']
 
     if args.noFields:
         args.noFields = [field.strip() for field in args.noFields.strip().split(',') if len(field)]
