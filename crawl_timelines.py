@@ -162,8 +162,8 @@ class Crawler:
             self.df.rename(columns={'id':'_id'}, inplace=True)
             log.debug('Got {} tweets'.format(len(self.df)))
 
-            self.df = self.df.to_dict(orient='records')
             self.last_user_id = self.df.user.iloc[0]
+            self.df = self.df.to_dict(orient='records')
 
             return True
         else:
