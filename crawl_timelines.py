@@ -57,8 +57,6 @@ class Crawler:
         # temporary buffer collection to store the user names/ids
         self.buffer_col = self.db['buffer']
 
-    def check_rate_limit_status(self):
-        """ returns the remaining number of calls and the reset time of the counter """
         # Collection to store the user_ids to crawl
         self.to_crawl = self.db['to_crawl']
 
@@ -131,7 +129,6 @@ class Crawler:
     def _clean_response(self, screen_name):
         """ removes unnecessary fields and formats the data - fit to feed in DB """
 
-        # log.debug('len(self.df): {}'.format(len(self.df)))
         self.max_id = self.df.id.min() - 1
 
         if self.pref_langs:
@@ -174,7 +171,7 @@ class Crawler:
     def crawl(self, top_users=False, followers=False):
         """ Efficient crawl for twitter timelines. """
 
-        # small hack to make the function call compatible with either of the params...
+        # small hack to make the function call compatible with both 'screen_names' / 'user_ids'...
         if self.screen_names:
             self.user_ids = [None] * len(self.screen_names)
         elif self.user_ids:
@@ -204,6 +201,14 @@ class Crawler:
                     store = self._clean_response(screen_name)
                     self.store_in_db() if store else None
                 else:
+                    # the previous user's tweets have now been crawled. Add him to the 'crawled' collection.
+                    try:
+                        # Add self.last_user_id to self.crawled_col
+                        # remove self.last_user_id / screen_name from self.buffer_col
+                        pass
+                    except:
+                        pass
+
                     try:
                         screen_name, user_id = next(generate_user)
                     except StopIteration:
@@ -291,6 +296,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--db", help='Name of the DB to connect to (Default: "twitter")', default='twitter')
     parser.add_argument("-b", "--collection", help='Name of the Collection of DB to connect to (Default: "timeline")',
                         default='timeline')
+
     parser.add_argument("-g", "--lang", help='list of preferred languages (separated by ",") to collect the tweets \
                         in. Should be in "ISO 639-1" format. See https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes \
                         E.g. "en, fr, de" (Default: None)', default=None)
