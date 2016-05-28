@@ -168,26 +168,70 @@ class Crawler:
             return False
 
 
+    def empty_buffer(self):
+        """ Gets the user_ids of the screen_names in 'buffer' collection and stores them in 'to_crawl' collection """
+
+        rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup')
+        while time.time() < reset_time:
+            if self.buffer_col.count() == 0:
+                break
+
+            if rem_hits > 0:
+                chunk = pd.DataFrame(list(self.buffer.find().limit(100)))
+                self.user_ids = self.util.get_user_ids(chunk._id.tolist())
+                self.store_in_db(collection='to_crawl', with_screen_name=True)
+                rem_hits -= 1
+
+                self.buffer.delete_many({'_id': {'$in': chunk._id.tolist()}})
+                time.sleep(.01)
+
+            else:
+                sleep = reset_time - time.time()
+                wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                log.debug('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
+                # Sleep for one more second to wait for the reset of the limits
+                time.sleep(sleep+1)
+                rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup')
+
+        log.debug('"buffer" emptied...')
+
+
+    def _get_name_or_id(self):
+        dc = self.to_crawl.find_one()
+
+        if dc is not None:
+            return dc.get('screen_name'), dc.get('_id')
+        else:
+            log.info('\n\n all user_ids crawled... get me more ids !!! \n\n')
+            sys.exit(0)
+
     def crawl(self, top_users=False, followers=False):
         """ Efficient crawl for twitter timelines. """
 
         # small hack to make the function call compatible with both 'screen_names' / 'user_ids'...
         if self.screen_names:
-            self.user_ids = [None] * len(self.screen_names)
+            self.store_in_db(collection='buffer')
+            # self.user_ids = [None] * len(self.screen_names)
         elif self.user_ids:
-            self.screen_names = [None] * len(self.user_ids)
+            self.store_in_db(collection='to_crawl')
+            # self.screen_names = [None] * len(self.user_ids)
         elif self.top_users:
             self.screen_names = get_top_twitteratis()
-            self.user_ids = [None] * len(self.screen_names)
+            self.store_in_db(collection='buffer')
+            # self.user_ids = [None] * len(self.screen_names)
         elif followers:
+            #TODO: Code to get followers - write in Utils
+            # self.user_ids = self.util.get_followers()
+            # self.store_in_db(collection='to_crawl')
             pass
-        else:
-            log.warning('nothing to crawl... specify options...')
-            return
 
 
-        generate_user = self._create_generator()
-        screen_name, user_id = next(generate_user)
+        # generate_user = self._create_generator()
+        # screen_name, user_id = next(generate_user)
+
+        # Empty the buffer collection first...
+        self.empty_buffer()
+        screen_name, user_id = self._get_name_or_id()
 
         self.max_id, self.since_id = None, self.get_since_id(screen_name, user_id)
         rem_hits, reset_time = self.util.check_rate_limit_status()
@@ -235,16 +279,32 @@ class Crawler:
         log.debug('exiting...\n\n')
 
 
-    def store_in_db(self):
+    def store_in_db(self, collection='tweets', with_screen_name=False):
         """ Stores fetched & preprocessed tweets in DB """
 
         try:
-            self.collection.insert_many(self.df, ordered=False)
+
+            if collection == 'tweets':
+                self.collection.insert_many(self.df, ordered=False)
+            elif collection == 'buffer'
+                fd = pd.DataFrame(self.screen_names, columns=['_id']).to_dict(orient='records')
+                self.buffer_col.insert_many(fd, ordered=False)
+            elif collection = 'to_crawl':
+                if not with_screen_name:
+                    fd = pd.DataFrame(self.user_ids, columns=['_id']).to_dict(orient='records')
+                else:
+                    fd = self.user_ids
+
+                self.to_crawl.insert_many(fd, ordered=False)
+            # elif collection = 'crawled':
+            #     self.crawled.insert_many(, ordered=False)
+
         except BulkWriteError:
             log.warning('some rows seem to already exist.. not updating them...')
 
-        if 'created_at_1' not in self.collection.index_information().keys():
-            self.collection.create_index('created_at')
+        if collection == 'tweets':
+            if 'created_at_1' not in self.collection.index_information().keys():
+                self.collection.create_index('created_at')
 
         log.debug('successfully stored in DB !!!')
         return
