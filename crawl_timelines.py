@@ -103,20 +103,6 @@ class Crawler:
             return None
 
 
-    def store_in_db(self):
-        """ Stores fetched & preprocessed tweets in DB """
-
-        try:
-            self.collection.insert_many(self.df, ordered=False)
-        except BulkWriteError:
-            log.warning('some rows seem to already exist.. not updating them...')
-
-        if 'created_at_1' not in self.collection.index_information().keys():
-            self.collection.create_index('created_at')
-
-        log.debug('successfully stored in DB !!!')
-        return
-
     def _create_generator(self):
         for screen_name, user_id in zip(self.screen_names, self.user_ids):
             yield screen_name.lstrip('@'), user_id
@@ -239,6 +225,20 @@ class Crawler:
 
     def drop_collection(self):
         log.warning('request received to drop Collection "{}"...'.format(self.collection.name))
+    def store_in_db(self):
+        """ Stores fetched & preprocessed tweets in DB """
+
+        try:
+            self.collection.insert_many(self.df, ordered=False)
+        except BulkWriteError:
+            log.warning('some rows seem to already exist.. not updating them...')
+
+        if 'created_at_1' not in self.collection.index_information().keys():
+            self.collection.create_index('created_at')
+
+        log.debug('successfully stored in DB !!!')
+        return
+
         inp = None
         while inp not in ['yes', 'y', 'no', 'n']:
             inp = input('\n Drop the collection "{}"? (yes/no): '.format(self.collection.name)).lower()
