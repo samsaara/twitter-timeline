@@ -8,6 +8,9 @@ In addition:
 * you can also crawl only those tweets in the languages you prefer based on [ISO 639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) codes.
 * Remove the fields from the JSON response that you don't think are useful before storing them.
 
+# Note:
+There's a 'test' branch with more advanced options. Read [this](https://github.com/vaddina/twitter-timeline/blob/test/README.md#note).
+
 # Requirements:
 * Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info. 
 * Store your `API Key and API secret` as raw strings on 2 separate lines in a file (default `.credentials`)
