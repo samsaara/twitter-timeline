@@ -353,5 +353,8 @@ if __name__ == "__main__":
     except:
         log.exception('Error !!! Closing down DB connections, if any..')
     finally:
-        if hasattr(crawler, 'client'):
-            crawler.client.close()
+        try:
+            if hasattr(crawler, 'client'):
+                crawler.client.close()
+        except:
+            pass
