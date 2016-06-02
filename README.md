@@ -1,6 +1,8 @@
 # twitter-timeline
 Simple Python Twitter crawler for user timelines
 
+[![Build Status](https://travis-ci.org/vaddina/twitter-timeline.svg?branch=master)](https://travis-ci.org/vaddina/twitter-timeline)
+
 Supports all options from the official [Twitter API](https://dev.twitter.com/rest/reference/get/statuses/user_timeline) documentation.
 
 In addition:
