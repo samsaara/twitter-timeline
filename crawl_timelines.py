@@ -106,7 +106,8 @@ class Crawler:
     def get_since_id(self, user_id):
         """ Finds the most recent tweet ID of any given user in DB """
 
-        return self.collection.find_one({'user':user_id}, sort=[('_id', -1)])
+        res = self.collection.find_one({'user.id':user_id}, sort=[('_id', -1)])
+        return res.get('_id') if res else None
 
 
     def _clean_response(self):
