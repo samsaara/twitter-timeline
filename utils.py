@@ -61,10 +61,13 @@ class Util:
 
 
     def check_rate_limit_status(self, criteria='timeline'):
-        """ returns the remaining number of calls and the reset time of the counter for 'timeline / user_lookup' """
+        """ returns the remaining number of calls and the reset time of the counter for
+            'timeline / user_lookup / follower ids'
+        """
 
-        url = '{}/application/rate_limit_status.json?resources={}'.format(self.BASE_URL, 'statuses' if
-                                                                            criteria=='timeline' else 'users')
+        dc = {'timeline':'statuses', 'user_lookup':'users', 'followers':'followers'}
+        url = '{}/application/rate_limit_status.json?resources={}'.format(self.BASE_URL, dc.get(criteria))
+
         auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
         header = {'Authorization': auth}
         req = urllib.request.Request(url, headers=header)
@@ -84,6 +87,8 @@ class Util:
             limits = resp['resources']['statuses']['/statuses/user_timeline']
         elif criteria == 'user_lookup':
             limits = resp['resources']['users']['/users/lookup']
+        elif criteria == 'followers':
+            limits = resp['resources']['followers']['/followers/ids']
 
         rem_hits, reset_time = limits.get('remaining'), limits.get('reset')
 
