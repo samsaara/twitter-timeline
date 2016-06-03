@@ -11,8 +11,15 @@ In addition:
 * Remove the fields from the JSON response that you don't think are useful before storing them.
 
 # Note:
-This `test` branch is a bit more advanced and has (& will have) more functionalities (like automatically fetching users, and their followers & their tweets etc. and many more to come)... and is more suited for my needs. I don't plan to include all of these in `master` anytime soon but might incorporate some of the stuff from this into it. For now, feel free to tweak around. :)
+This `test` branch is a bit more advanced and has more functionalities (listed below)... and is more suited for my needs. I don't plan to include all of these in `master` anytime soon but might incorporate some of the stuff from this into it. For now, feel free to tweak around. :)
 
+Currently within this branch, you can fetch:
+* [Top 1000](http://tvitre.no/norsktoppen) Norwegian twitteratis and their tweets
+* Timelines of any public account maintaining twitteratis given by either their `screen_name` or `user_id`.
+* Their (👆) followers (Default-Max: 100K) & their tweets and so on...
+* Only new / recent tweets that you haven't crawled since last time.
+
+You can also filter by your preferred language & JSON fields to store as mentioned above. 🙃
 
 # Requirements:
 * Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info.
