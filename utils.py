@@ -2,10 +2,12 @@
 """ core utils """
 
 import base64
+import time
 import pandas as pd
 import urllib
 import urllib.request
 import ujson
+from bson.int64 import Int64
 
 import logging
 logging.basicConfig(filename="crawler.log", level=logging.DEBUG,
@@ -133,6 +135,63 @@ class Util:
         df.rename(columns={'id':'_id'}, inplace=True)
 
         return df.to_dict(orient='records')
+
+
+    def get_followers(self, rem_hits, reset_time, user_id=None, screen_name=None, levels=-1):
+        """ Get the followers' userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for any given
+            user. Specify 'levels=-1' for that...
+        """
+
+        if levels == -1:
+            levels = 20     # Download up to 100K followers max for any user.
+
+        level = 0
+        cursor = -1
+        IDs = []
+        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
+        header = {'Authorization': auth}
+
+        log.debug('fetching followers for user {}...'.format(user_id if user_id else screen_name))
+        while time.time() < reset_time:
+            if not (level < levels and cursor != 0):
+                break
+
+            if rem_hits > 0:
+                url = '{}/followers/ids.json?cursor={}&{}={}&count=5000'.format(self.BASE_URL, cursor,
+                                        'user_id' if user_id else 'screen_name', user_id if user_id else screen_name)
+                req = urllib.request.Request(url, headers=header)
+                resp = None
+                try:
+                    with urllib.request.urlopen(req) as op:
+                        resp = op.read()
+                except:
+                    log.exception('Error in fetching the followers !!!')
+                    break
+
+                rem_hits -= 1
+
+                if resp:
+                    dc = ujson.loads(resp.decode('utf8'))
+                    IDs += dc["ids"]
+                    cursor = dc['next_cursor']
+                    log.debug('next_cursor: {}'.format(cursor))
+                else:
+                    break
+
+                level += 1
+                time.sleep(.01)
+
+            else:
+                sleep = reset_time - time.time()
+                wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                log.info('Followers_utils: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
+                                                                                                wakeup_time))
+                # Sleep for one more second to wait for the reset of the limits
+                time.sleep(sleep+1)
+                rem_hits, reset_time = self.check_rate_limit_status(criteria='followers')
+
+        log.debug('got {} followers for user: {}'.format(len(IDs), user_id if user_id else screen_name))
+        return pd.DataFrame(IDs, columns=['_id'], dtype=Int64).to_dict(orient='records'), rem_hits, reset_time
 
 
     def get_top_twitteratis(self, url="http://tvitre.no/norsktoppen"):
