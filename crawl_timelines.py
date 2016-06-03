@@ -177,6 +177,8 @@ class Crawler:
 
 
     def _get_name_or_id(self):
+        """ Returns user_id from 'to_crawl' to crawl the timeline. If it's been already crawled, get the next one. """
+
         dc = self.to_crawl.find_one()
 
         while True:
