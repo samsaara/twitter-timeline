@@ -5,8 +5,10 @@ __author__ = 'Vaddina'
 import argparse
 import time
 import ujson
+from bson.int64 import Int64
 import urllib
 import urllib.request
+from urllib.error import HTTPError
 
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
@@ -23,23 +25,22 @@ log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
 
-
 class Crawler:
 
-    def __init__(self, screen_names=[], user_ids=[], count=200, trim_user=True, exclude_replies=True,
+    def __init__(self, screen_names=[], user_ids=[], count=200, exclude_replies=True, exclude_fields=None,
                     contributor_details=False, include_rts=False, db='twitter', port=27017, host='localhost',
-                    collection='timeline', pref_langs=['en', 'no', 'nn', 'nb'], exclude_fields=None):
+                    collection='timeline', pref_langs=['en', 'no', 'nn', 'nb']):
 
         self.screen_names = screen_names
         self.user_ids = user_ids
         self.count = count
-        self.trim_user = trim_user
         self.exclude_replies = exclude_replies
         self.contributor_details = contributor_details
         self.include_rts = include_rts
         self.pref_langs = pref_langs
         self.exclude_fields = exclude_fields
 
+        # Get all the utility functions
         self.util = Util()
 
         try:
@@ -49,19 +50,13 @@ class Crawler:
             return
 
         self.db = self.client[db]
-        self.collection = self.db[collection]
-        if db in self.client.database_names() and collection in self.db.collection_names():
-            if 'created_at_1' not in self.collection.index_information().keys():
-                self.collection.create_index('created_at')
+        self.collection = self.db[collection]       # Main collection for storing tweets & metadata
+        self.buffer = self.db['buffer']             # Temporary collection to store screen_names
+        self.to_crawl = self.db['to_crawl']         # Collection to store user_ids to crawl
+        self.crawled = self.db['crawled']           # Collection to store user_ids that have been crawled
 
-        # temporary buffer collection to store the user names/ids
-        self.buffer_col = self.db['buffer']
-
-        # Collection to store the user_ids to crawl
-        self.to_crawl = self.db['to_crawl']
-
-        # collection to store the user_ids of the people whose timelines are crawled.
-        self.crawled = self.db['crawled']
+        # Boolean Variable that's set to True once a few indices (listed below in 'store_in_db') are created / detected
+        self.created_indices = False
 
 
     def _get_timeline(self, screen_name=None, user_id=None):
@@ -83,9 +78,9 @@ class Crawler:
             params += '&max_id={}'.format(self.max_id)
 
         params += '&count={}'.format(self.count)
-        params += '&trim_user={}'.format(str(self.trim_user).lower())
         params += '&exclude_replies={}'.format(str(self.exclude_replies).lower())
         params += '&contributor_details={}'.format(str(self.contributor_details).lower())
+        # TODO: Decide whether this to be included or not...
         params += '&include_rts={}'.format(str(self.include_rts).lower())
 
         full_timeline_url = self.util.TIMELINE_URL + params
@@ -94,51 +89,35 @@ class Crawler:
         header = {'Authorization': auth}
         req = urllib.request.Request(full_timeline_url, headers=header)
 
+        log.info('fetching timeline of user: {}'.format(screen_name if screen_name else user_id))
         try:
-            log.debug('fetching timeline of user: {}'.format(screen_name if screen_name else user_id))
             with urllib.request.urlopen(req) as op:
                 resp = op.read()
 
             # Return raw response...
             return resp.decode('utf8')
 
-        except:
-            log.exception("\n Error crawling the timeline !!! \n")
-            return None
+        except HTTPError:
+            log.error ('Not possible to crawl... may be a protected user')
+
+        return None
 
 
-    def _create_generator(self):
-        for screen_name, user_id in zip(self.screen_names, self.user_ids):
-            yield screen_name.lstrip('@'), user_id
-
-
-    def get_since_id(self, screen_name, user_id):
+    def get_since_id(self, user_id):
         """ Finds the most recent tweet ID of any given user in DB """
 
-        if screen_name:
-            res = self.collection.find_one({'screen_name':screen_name}, sort=[('_id', -1)])
-        else:
-            res = self.collection.find_one({'user.id':user_id}, sort=[('_id', -1)])
-
-        if res is not None:
-            return res['_id']
-        else:
-            return None
+        return self.collection.find_one({'user':user_id}, sort=[('_id', -1)])
 
 
-    def _clean_response(self, screen_name):
+    def _clean_response(self):
         """ removes unnecessary fields and formats the data - fit to feed in DB """
 
         self.max_id = self.df.id.min() - 1
-
         if self.pref_langs:
             # Extract only those tweets that are in one of preferred languages...
             self.df = self.df[self.df.lang.isin(self.pref_langs)]
 
         if len(self.df):
-            if screen_name:
-                self.df['screen_name'] = screen_name
-
             # *** WARNING: Uncomment this when appropriate... Currently commented to increase speed. ***
 
             # if self.exclude_fields:
@@ -151,18 +130,18 @@ class Crawler:
             # if 'entities' in self.df.columns:
                 # strip entities
             self.df.entities = self.df.entities.apply(lambda x: self.util.strip_entities(x))
-            self.df.user = self.df.user.apply(lambda x: x.get('id'))
-
+            self.df.user = self.df.user.apply(lambda x: {'id': x.get('id'), 'screen_name': x.get('screen_name')})
             # if 'id_str' in self.df.columns:
             #     self.df.id_str = self.df.id_str.astype(str)
 
             self.df.rename(columns={'id':'_id'}, inplace=True)
             log.debug('Got {} tweets'.format(len(self.df)))
 
-            self.last_user_id = self.df.user.iloc[0]
             self.df = self.df.to_dict(orient='records')
 
+            log.debug('cleaned response...')
             return True
+
         else:
             log.warning('no tweets found in preferred language...')
             return False
@@ -173,7 +152,7 @@ class Crawler:
 
         rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup')
         while time.time() < reset_time:
-            if self.buffer_col.count() == 0:
+            if self.buffer.count() == 0:
                 break
 
             if rem_hits > 0:
@@ -188,7 +167,8 @@ class Crawler:
             else:
                 sleep = reset_time - time.time()
                 wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
-                log.debug('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
+                log.info('user_lookup: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
+                                                                                            wakeup_time))
                 # Sleep for one more second to wait for the reset of the limits
                 time.sleep(sleep+1)
                 rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup')
@@ -199,112 +179,163 @@ class Crawler:
     def _get_name_or_id(self):
         dc = self.to_crawl.find_one()
 
-        if dc is not None:
-            return dc.get('screen_name'), dc.get('_id')
-        else:
-            log.info('\n\n all user_ids crawled... get me more ids !!! \n\n')
-            sys.exit(0)
+        while True:
+            if dc is not None:
+                screen_name, user_id = dc.get('screen_name'), dc.get('_id')
+                if self.crawled.find_one({'_id': user_id}):
+                    log.debug('User "{}" already crawled...so skipping now...'.format(screen_name if screen_name else
+                                                                                    user_id))
+                    self.to_crawl.delete_many({'_id': user_id})
+                    dc = self.to_crawl.find_one()
+                    continue
+                else:
+                    return screen_name, user_id
+            else:
+                log.info('\n\n all user_ids crawled... get me more ids !!! \n\n')
+                return None, None
 
-    def crawl(self, top_users=False, followers=False):
+
+    def fill_with_followers(self, user_id=None, screen_name=None, from_crawled=False, levels=1):
+        """ Get the followers' userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for any given
+            user. Specify 'levels=-1' for that...
+
+            If 'from_crawled' is set, then it gets the follower_ids for each of the crawled users
+        """
+
+        rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers')
+
+        if not from_crawled:
+            df, _, _ = self.util.get_followers(rem_hits, reset_time, user_id, screen_name, levels)
+            try:
+                self.to_crawl.insert_many(df, ordered=False)
+            except BulkWriteError:
+                log.warning('some user_ids seem to already exist...')
+
+            log.debug('added followers of user {} to DB'.format(screen_name if screen_name else user_id))
+
+        else:
+            cur = self.crawled.find()
+            while True:
+                log.debug('top: rem_hits: {}, reset_time: {}, now: {}'.format(rem_hits, reset_time, time.time()))
+                if (rem_hits > 0) and (time.time() < reset_time):
+                    try:
+                        _id = next(cur).get('_id')
+                    except StopIteration:
+                        break
+
+                    df, rem_hits, reset_time = self.util.get_followers(rem_hits, reset_time, user_id=_id, levels=levels)
+
+                    try:
+                        self.to_crawl.insert_many(df, ordered=False)
+                    except BulkWriteError:
+                        log.warning('some user_ids seem to already exist...')
+                else:
+                    sleep = reset_time - time.time()
+                    wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                    log.info('Followers_crawl: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
+                                                                                                    wakeup_time))
+                    # Sleep for one more second to wait for the reset of the limits
+                    time.sleep(sleep+1)
+                    rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers')
+
+            log.debug("fetched followers for ids in 'crawled' upto level: {}".format(levels))
+
+    def crawl(self, top_users=False, only_new=False):
         """ Efficient crawl for twitter timelines. """
 
         # small hack to make the function call compatible with both 'screen_names' / 'user_ids'...
         if self.screen_names:
             self.store_in_db(collection='buffer')
-            # self.user_ids = [None] * len(self.screen_names)
         elif self.user_ids:
             self.store_in_db(collection='to_crawl')
-            # self.screen_names = [None] * len(self.user_ids)
-        elif self.top_users:
-            self.screen_names = get_top_twitteratis()
+        elif top_users:
+            self.screen_names = self.util.get_top_twitteratis()
             self.store_in_db(collection='buffer')
-            # self.user_ids = [None] * len(self.screen_names)
-        elif followers:
-            #TODO: Code to get followers - write in Utils
-            # self.user_ids = self.util.get_followers()
-            # self.store_in_db(collection='to_crawl')
-            pass
 
-
-        # generate_user = self._create_generator()
-        # screen_name, user_id = next(generate_user)
+        # TODO: Implement 'only_new' functionality
 
         # Empty the buffer collection first...
         self.empty_buffer()
-        screen_name, user_id = self._get_name_or_id()
 
-        self.max_id, self.since_id = None, self.get_since_id(screen_name, user_id)
-        rem_hits, reset_time = self.util.check_rate_limit_status()
-        while time.time() < reset_time:
-            if rem_hits > 0:
-                resp = self._get_timeline(screen_name, user_id)
-                rem_hits -= 1
+        while True:
+            screen_name, user_id = self._get_name_or_id()
+            if not (screen_name or user_id):
+                break
 
-                if resp != '[]' and resp is not None:
-                    self.df = pd.read_json(resp)
-                    store = self._clean_response(screen_name)
-                    self.store_in_db() if store else None
-                else:
-                    # the previous user's tweets have now been crawled. Add him to the 'crawled' collection.
-                    try:
-                        # Add self.last_user_id to self.crawled_col
-                        # remove self.last_user_id / screen_name from self.buffer_col
-                        pass
-                    except:
-                        pass
+            log.info('crawling for "{}"'.format(screen_name if screen_name else user_id))
+            self.max_id, self.since_id = None, None
+            rem_hits, reset_time = self.util.check_rate_limit_status()
 
-                    try:
-                        screen_name, user_id = next(generate_user)
-                    except StopIteration:
-                        log.info('crawling finished...')
+            while time.time() < reset_time:
+                if rem_hits > 0:
+                    resp = self._get_timeline(screen_name, user_id)
+                    rem_hits -= 1
+
+                    if resp != '[]' and resp is not None:
+                        self.df = pd.read_json(resp)
+                        store = self._clean_response()
+                        self.store_in_db() if store else None
+                    else:
+                        log.info('crawling finished for user {}'.format(screen_name if screen_name else user_id))
+                        self.crawled.insert_one({'_id': user_id})
+                        self.to_crawl.delete_one({'_id': user_id})
                         break
 
-                    log.debug('getting next user: {}'.format(screen_name if screen_name else user_id))
-                    self.max_id, self.since_id = None, self.get_since_id(screen_name, user_id)
+                    time.sleep(.01)
 
-                time.sleep(.01)
-
-            else:
-                interm_hits, interm_time = self.util.check_rate_limit_status()
-                if interm_time > reset_time:
-                    rem_hits, reset_time = interm_hits, interm_time
                 else:
-                    sleep = interm_time - time.time()
-                    wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
-                    log.debug('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
-                    # Sleep for one more second to wait for the reset of the limits
-                    time.sleep(sleep+1)
-                    rem_hits, reset_time = self.util.check_rate_limit_status()
+                    interm_hits, interm_time = self.util.check_rate_limit_status()
+                    if interm_time > reset_time:
+                        rem_hits, reset_time = interm_hits, interm_time
+                    else:
+                        sleep = interm_time - time.time()
+                        wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                        log.info('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
+                        # Sleep for one more second to wait for the reset of the limits
+                        time.sleep(sleep+1)
+                        rem_hits, reset_time = self.util.check_rate_limit_status()
 
-        log.debug('exiting...\n\n')
+        log.info('exiting...\n\n')
 
 
     def store_in_db(self, collection='tweets', with_screen_name=False):
         """ Stores fetched & preprocessed tweets in DB """
 
         try:
-
             if collection == 'tweets':
                 self.collection.insert_many(self.df, ordered=False)
-            elif collection == 'buffer'
-                fd = pd.DataFrame(self.screen_names, columns=['_id']).to_dict(orient='records')
-                self.buffer_col.insert_many(fd, ordered=False)
-            elif collection = 'to_crawl':
+
+                if not self.created_indices:
+                    if 'created_at_1' not in self.collection.index_information().keys():
+                        log.debug('\n\n creating indices \n\n')
+                        self.collection.create_index('created_at')
+
+                    if 'user.id_1' not in self.collection.index_information().keys():
+                        self.collection.create_index('user.id')
+
+                    if 'user.screen_name_1' not in self.collection.index_information().keys():
+                        self.collection.create_index('user.screen_name')
+
+                    self.created_indices = True
+
+            elif collection == 'buffer':
+                fd = pd.DataFrame(self.screen_names, columns=['_id'], dtype=Int64).to_dict(orient='records')
+                self.buffer.insert_many(fd, ordered=False)
+
+                log.debug('inserted in "buffer"')
+
+            elif collection == 'to_crawl':
                 if not with_screen_name:
-                    fd = pd.DataFrame(self.user_ids, columns=['_id']).to_dict(orient='records')
+                    fd = pd.DataFrame(self.user_ids, columns=['_id'], dtype=Int64).to_dict(orient='records')
                 else:
                     fd = self.user_ids
 
                 self.to_crawl.insert_many(fd, ordered=False)
-            # elif collection = 'crawled':
-            #     self.crawled.insert_many(, ordered=False)
+
+                log.debug('inserted in "to_crawl"')
 
         except BulkWriteError:
             log.warning('some rows seem to already exist.. not updating them...')
-
-        if collection == 'tweets':
-            if 'created_at_1' not in self.collection.index_information().keys():
-                self.collection.create_index('created_at')
 
         log.debug('successfully stored in DB !!!')
         return
@@ -312,6 +343,11 @@ class Crawler:
 
     def drop_collection(self, collection):
         log.warning('request received to drop Collection "{}"...'.format(collection))
+        available_cols = self.db.collection_names()
+        if not collection in available_cols:
+            log.error('"{}" collection not found... avalable: {}'.format(collection, available_cols))
+            return
+
         inp = None
         while inp not in ['yes', 'y', 'no', 'n']:
             inp = input('\n Drop the collection "{}"? (yes/no): '.format(collection)).lower()
@@ -325,6 +361,11 @@ class Crawler:
 
     def drop_database(self, database):
         log.warning('request received to drop Database {}...'.format(database))
+        available_dbs = self.client.database_names()
+        if database not in available_dbs:
+            log.error('"{}" database not found... avalable: {}'.format(database, available_dbs))
+            return
+
         inp = None
         while inp not in ['yes', 'y', 'no', 'n']:
             inp = input('\n Drop the Database "{}"? (yes/no): '.format(database)).lower()
@@ -342,8 +383,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--names", help='screen_names separated by "," (this or "--ids" option is mandatory). Takes precedence over "--ids"')
     parser.add_argument("-i", "--ids", help='user_ids separated by "," (this or "--names" option is mandatory)')
-    parser.add_argument("-r", "--noTrim", action='store_false', help="Don't trim user details !!! (default: False)",
-                        default=True)
     parser.add_argument("-x", "--noExReps", action='store_false', help='Do Not exclude replies while crawling tweets \
                         (Default: True)', default=True)
     parser.add_argument("-c", "--contrib", action='store_true', help='Include Contributor details (Default: False)',
@@ -391,12 +430,12 @@ if __name__ == "__main__":
                         ]
 
     try:
-        crawler = Crawler(screen_names=args.names, user_ids=args.ids, trim_user=args.noTrim,
+        crawler = Crawler(screen_names=args.names, user_ids=args.ids, exclude_fields=args.noFields,
                         exclude_replies=args.noExReps, contributor_details=args.contrib, include_rts=args.retweets,
-                        db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang,
-                        exclude_fields=args.noFields)
+                        db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang)
 
-        crawler.crawl(top_users=False, followers=False)
+        # crawler.crawl(top_users=True)
+        crawler.fill_with_followers(user_id=141968149, levels=2)
 
     except:
         log.exception('Error !!! Closing down DB connections, if any..')
