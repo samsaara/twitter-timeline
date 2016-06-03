@@ -243,30 +243,48 @@ class Crawler:
 
             log.debug("fetched followers for ids in 'crawled' upto level: {}".format(levels))
 
+
     def crawl(self, top_users=False, only_new=False):
-        """ Efficient crawl for twitter timelines. """
+        """ Efficient crawl for twitter timelines.
 
-        # small hack to make the function call compatible with both 'screen_names' / 'user_ids'...
-        if self.screen_names:
-            self.store_in_db(collection='buffer')
-        elif self.user_ids:
-            self.store_in_db(collection='to_crawl')
-        elif top_users:
-            self.screen_names = self.util.get_top_twitteratis()
-            self.store_in_db(collection='buffer')
+            'top_users' - crawl tweets for top 1000 twitteratis listed at "http://tvitre.no/norsktoppen"
+            'only_new'  - crawl only those tweets that haven't been crawled since last time.
+                          This option takes precedence over 'top_users' & manually passing screen_names / user_ids
 
-        # TODO: Implement 'only_new' functionality
+        """
 
-        # Empty the buffer collection first...
-        self.empty_buffer()
+        if not only_new:
+            # small hack to make the function call compatible with both 'screen_names' & 'user_ids'...
+            if self.screen_names:
+                self.store_in_db(collection='buffer')
+            if self.user_ids:
+                self.store_in_db(collection='to_crawl')
+            if top_users:
+                self.screen_names = self.util.get_top_twitteratis()
+                self.store_in_db(collection='buffer')
+
+            # Empty the buffer collection first...
+            self.empty_buffer()
+        else:
+            only_new_cursor = self.crawled.find()
 
         while True:
-            screen_name, user_id = self._get_name_or_id()
+            self.max_id, self.since_id = None, None
+
+            if not only_new:
+                screen_name, user_id = self._get_name_or_id()
+            else:
+                try:
+                    screen_name, user_id = None, next(only_new_cursor).get('_id')
+                except StopIteration:
+                    break
+
+                self.since_id = self.get_since_id(user_id)
+
             if not (screen_name or user_id):
                 break
 
             log.info('crawling for "{}"'.format(screen_name if screen_name else user_id))
-            self.max_id, self.since_id = None, None
             rem_hits, reset_time = self.util.check_rate_limit_status()
 
             while time.time() < reset_time:
@@ -280,6 +298,9 @@ class Crawler:
                         self.store_in_db() if store else None
                     else:
                         log.info('crawling finished for user {}'.format(screen_name if screen_name else user_id))
+                        if only_new:
+                            break
+
                         self.crawled.insert_one({'_id': user_id})
                         self.to_crawl.delete_one({'_id': user_id})
                         break
