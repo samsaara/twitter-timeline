@@ -217,13 +217,14 @@ class Crawler:
             log.debug('added followers of user {} to DB'.format(screen_name if screen_name else user_id))
 
         else:
-            cur = self.crawled.find()
+            cur = self.crawled.find(no_cursor_timeout=True)
             while True:
                 log.debug('top: rem_hits: {}, reset_time: {}, now: {}'.format(rem_hits, reset_time, time.time()))
                 if (rem_hits > 0) and (time.time() < reset_time):
                     try:
                         _id = next(cur).get('_id')
                     except StopIteration:
+                        cur.close()
                         break
 
                     df, rem_hits, reset_time = self.util.get_followers(rem_hits, reset_time, user_id=_id, levels=levels)
