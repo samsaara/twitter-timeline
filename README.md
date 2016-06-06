@@ -18,12 +18,21 @@ Currently within this branch, you can fetch:
 * Timelines of any public account maintaining twitteratis given by either their `screen_name` or `user_id`.
 * Their (👆) followers (Default-Max: 100K) & their tweets and so on...
 * Only new / recent tweets that you haven't crawled since last time.
+* Supports **Multiple API Keys & Secrets**. The crawler switches the credentials whenever rate limits are reached for one of the API Key-Secret combinations...
+so as to wait less until the limits are reset. With sufficient API Key-Secret pairs (say 5, to be safe), it is possible to crawl without waiting. (The rate limits are still respected in all cases)
 
 You can also filter by your preferred language & JSON fields to store as mentioned above. 🙃
 
 # Requirements:
 * Needs *MongoDB* to store the tweets and a few other components. Check [here](requirements.txt) for more info.
-* Store your `API Key and API secret` as raw strings on 2 separate lines in a file (default `.credentials`)
+* Store your `API Key(s) and API secret(s)` as pairs of raw strings on separate lines in a file (default name `.credentials`). E.g.,
+```
+'api_key_1'
+'api_secret_1'
+'api_key_2'
+'api_secret_2'
+...
+```
 
  Do `pip install -r requirements.txt`
 
