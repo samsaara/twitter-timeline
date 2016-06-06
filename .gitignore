@@ -2,3 +2,4 @@
 .credentials
 crawler.log
 algo.txt
+nohup.out
