@@ -24,7 +24,7 @@ class Util:
         self.TOKEN_URL = 'https://api.twitter.com/oauth2/token'
         self.TIMELINE_URL = '{}/statuses/user_timeline.json'.format(self.BASE_URL)
 
-        self.ACCESS_TOKEN = self.get_access_token(credentials_file)
+        self.ACCESS_TOKENS = self.get_access_tokens(credentials_file)
 
 
     def get_credentials(self, credentials_file):
@@ -34,35 +34,40 @@ class Util:
         with open(credentials_file) as fl:
             contents = fl.read()
 
-        api_key, api_secret, *k = contents.split('\n')
+        api_keys = contents.splitlines()[::2]
+        api_secrets = contents.splitlines()[1::2]
 
-        return api_key, api_secret
+        assert len(api_keys) == len(api_secrets), 'unequal api keys & secrets... number should be even'
+        return api_keys, api_secrets
 
 
-    def get_access_token(self, credentials_file):
+    def get_access_tokens(self, credentials_file):
         """ Gets bearer (access) token for crawling the timelines """
 
-        api_key, api_secret = self.get_credentials(credentials_file)
-        b64enc = base64.b64encode('{}:{}'.format(api_key, api_secret).encode('ascii'))
-        auth = 'Basic {}'.format(b64enc.decode('utf-8'))
-        data = urllib.parse.urlencode({'grant_type':'client_credentials'}).encode('utf-8')
-        headers = {'Authorization': auth,
-                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'}
-        req = urllib.request.Request(self.TOKEN_URL, headers=headers, data=data)
+        api_keys, api_secrets = self.get_credentials(credentials_file)
+        tokens = []
+        for i in range(len(api_keys)):
+            b64enc = base64.b64encode('{}:{}'.format(api_keys[i], api_secrets[i]).encode('ascii'))
+            auth = 'Basic {}'.format(b64enc.decode('utf-8'))
+            data = urllib.parse.urlencode({'grant_type':'client_credentials'}).encode('utf-8')
+            headers = {'Authorization': auth,
+                        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'}
+            req = urllib.request.Request(self.TOKEN_URL, headers=headers, data=data)
 
-        try:
-            log.debug('fetching bearer token...')
-            with urllib.request.urlopen(req) as op:
-                resp = op.read()
-            access_token = ujson.loads(resp.decode('utf8'))['access_token']
-            return access_token
+            try:
+                log.debug('fetching bearer token...')
+                with urllib.request.urlopen(req) as op:
+                    resp = op.read()
+                tokens.append(ujson.loads(resp.decode('utf8'))['access_token'])
 
-        except:
-            log.exception("Error fetching the bearer token. Re-check app's credentials !!!")
-            return None
+            except:
+                log.exception("Error fetching the bearer token. Re-check app: [{}] credentials !!!".format(i))
+                return None
+
+        return tokens
 
 
-    def check_rate_limit_status(self, criteria='timeline'):
+    def check_rate_limit_status(self, criteria='timeline', app=0):
         """ returns the remaining number of calls and the reset time of the counter for
             'timeline / user_lookup / follower ids'
         """
@@ -70,7 +75,7 @@ class Util:
         dc = {'timeline':'statuses', 'user_lookup':'users', 'followers':'followers'}
         url = '{}/application/rate_limit_status.json?resources={}'.format(self.BASE_URL, dc.get(criteria))
 
-        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
+        auth = 'Bearer {}'.format(self.ACCESS_TOKENS[app])
         header = {'Authorization': auth}
         req = urllib.request.Request(url, headers=header)
 
@@ -114,11 +119,11 @@ class Util:
         return dc
 
 
-    def get_user_ids(self, usernames):
+    def get_user_ids(self, usernames, app=0):
         """ Gets user_ids given list of screen_names """
 
         url = '{}/users/lookup.json?screen_name={}'.format(self.BASE_URL, ','.join(usernames))
-        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
+        auth = 'Bearer {}'.format(self.ACCESS_TOKENS[app])
         header = {'Authorization': auth}
         req = urllib.request.Request(url, headers=header)
 
@@ -137,10 +142,12 @@ class Util:
         return df.to_dict(orient='records')
 
 
-    def get_followers(self, rem_hits, reset_time, user_id=None, screen_name=None, levels=-1):
+    def get_followers(self, rem_hits, reset_time, user_id=None, screen_name=None, levels=-1, app=0):
         """ Get the followers' userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for any given
             user. Specify 'levels=-1' for that...
         """
+        quota_full = 0
+        tot_tokens = len(self.ACCESS_TOKENS)
 
         if levels == -1:
             levels = 20     # Download up to 100K followers max for any user.
@@ -148,17 +155,17 @@ class Util:
         level = 0
         cursor = -1
         IDs = []
-        auth = 'Bearer {}'.format(self.ACCESS_TOKEN)
-        header = {'Authorization': auth}
 
         log.debug('fetching followers for user {}...'.format(user_id if user_id else screen_name))
-        while time.time() < reset_time:
+        while True:
             if not (level < levels and cursor != 0):
                 break
 
             if rem_hits > 0:
                 url = '{}/followers/ids.json?cursor={}&{}={}&count=5000'.format(self.BASE_URL, cursor,
                                         'user_id' if user_id else 'screen_name', user_id if user_id else screen_name)
+                auth = 'Bearer {}'.format(self.ACCESS_TOKENS[app])
+                header = {'Authorization': auth}
                 req = urllib.request.Request(url, headers=header)
                 resp = None
                 try:
@@ -180,18 +187,29 @@ class Util:
 
                 level += 1
                 time.sleep(.01)
+                quota_full = 0
 
             else:
-                sleep = reset_time - time.time()
-                wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
-                log.info('Followers_utils: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
+                app += 1
+                quota_full += 1
+                if app % tot_tokens == 0:
+                    app = 0
+
+                if quota_full == tot_tokens:
+                    sleep = 15 * 60
+                    wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                    log.info('user_lookup: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
                                                                                                 wakeup_time))
-                # Sleep for one more second to wait for the reset of the limits
-                time.sleep(sleep+1)
-                rem_hits, reset_time = self.check_rate_limit_status(criteria='followers')
+                    # Sleep for one more second to wait for the reset of the limits
+                    time.sleep(sleep+1)
+                    quota_full = 0
+
+                rem_hits, reset_time = self.check_rate_limit_status(criteria='followers', app=app)
+                log.debug('\n\n Util.get_followers: swtiched to app: {}. New rem_hits: {}, reset_time: {} \
+                            \n\n'.format(app, rem_hits, reset_time))
 
         log.debug('got {} followers for user: {}'.format(len(IDs), user_id if user_id else screen_name))
-        return pd.DataFrame(IDs, columns=['_id'], dtype=Int64).to_dict(orient='records'), rem_hits, reset_time
+        return pd.DataFrame(IDs, columns=['_id'], dtype=Int64).to_dict(orient='records'), rem_hits, reset_time, app
 
 
     def get_top_twitteratis(self, url="http://tvitre.no/norsktoppen"):
@@ -229,9 +247,12 @@ class Util:
 
         return _collect_usernames(url)
 
+
+
 if __name__ == '__main__':
-    pass
-    # ut = Util()
-    # print (ut.get_user_ids(['bakkenbaeck', 'Google']))
-    # twitteratis = get_top_twitteratis()
+    ut = Util()
+    for i in range(len(ut.ACCESS_TOKENS)):
+        print (ut.check_rate_limit_status(app=i))
+
+    # twitteratis = ut.get_top_twitteratis()
     # print (twitteratis[:10])

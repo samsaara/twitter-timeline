@@ -42,6 +42,7 @@ class Crawler:
 
         # Get all the utility functions
         self.util = Util()
+        self.tot_tokens = len(self.util.ACCESS_TOKENS)
 
         try:
             self.client = MongoClient(host, port)
@@ -59,17 +60,17 @@ class Crawler:
         self.created_indices = False
 
 
-    def _get_timeline(self, screen_name=None, user_id=None):
+    def _get_timeline(self, screen_name=None, user_id=None, app=0):
         """ Main workhorse for crawling the timelines """
 
         if not (screen_name or user_id):
             log.exception("'screen_name' or 'user_id' required !!! ")
             return None
 
-        if screen_name:
-            params = '?screen_name={}'.format(screen_name)
-        else:
+        if user_id:
             params = '?user_id={}'.format(user_id)
+        else:
+            params = '?screen_name={}'.format(screen_name)
 
         if self.since_id:
             params += '&since_id={}'.format(self.since_id)
@@ -80,12 +81,11 @@ class Crawler:
         params += '&count={}'.format(self.count)
         params += '&exclude_replies={}'.format(str(self.exclude_replies).lower())
         params += '&contributor_details={}'.format(str(self.contributor_details).lower())
-        # TODO: Decide whether this to be included or not...
         params += '&include_rts={}'.format(str(self.include_rts).lower())
 
         full_timeline_url = self.util.TIMELINE_URL + params
         # log.debug("\nquery: \n{}\n".format(full_timeline_url))
-        auth = 'Bearer {}'.format(self.util.ACCESS_TOKEN)
+        auth = 'Bearer {}'.format(self.util.ACCESS_TOKENS[app])
         header = {'Authorization': auth}
         req = urllib.request.Request(full_timeline_url, headers=header)
 
@@ -148,31 +148,44 @@ class Crawler:
             return False
 
 
-    def empty_buffer(self):
+    def empty_buffer(self, app=0):
         """ Gets the user_ids of the screen_names in 'buffer' collection and stores them in 'to_crawl' collection """
 
-        rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup')
-        while time.time() < reset_time:
+        rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup', app=app)
+        quota_full = 0
+
+        while True:
             if self.buffer.count() == 0:
                 break
 
             if rem_hits > 0:
                 chunk = pd.DataFrame(list(self.buffer.find().limit(100)))
-                self.user_ids = self.util.get_user_ids(chunk._id.tolist())
+                self.user_ids = self.util.get_user_ids(chunk._id.tolist(), app)
                 self.store_in_db(collection='to_crawl', with_screen_name=True)
                 rem_hits -= 1
 
                 self.buffer.delete_many({'_id': {'$in': chunk._id.tolist()}})
                 time.sleep(.01)
+                quota_full = 0
 
             else:
-                sleep = reset_time - time.time()
-                wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
-                log.info('user_lookup: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
-                                                                                            wakeup_time))
-                # Sleep for one more second to wait for the reset of the limits
-                time.sleep(sleep+1)
-                rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup')
+                app += 1
+                quota_full += 1
+                if app % self.tot_tokens == 0:
+                    app = 0
+
+                if quota_full == self.tot_tokens:
+                    sleep = 15 * 60
+                    wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                    log.info('user_lookup: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
+                                                                                                wakeup_time))
+                    # Sleep for one more second to wait for the reset of the limits
+                    time.sleep(sleep+1)
+                    quota_full = 0
+
+                rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup', app=app)
+                log.debug('\n\n switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app, rem_hits,
+                                                                                                    reset_time))
 
         log.debug('"buffer" emptied...')
 
@@ -198,17 +211,18 @@ class Crawler:
                 return None, None
 
 
-    def fill_with_followers(self, user_id=None, screen_name=None, from_crawled=False, levels=1):
+    def fill_with_followers(self, user_id=None, screen_name=None, from_crawled=False, levels=1, app=0):
         """ Get the followers' userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for any given
             user. Specify 'levels=-1' for that...
 
             If 'from_crawled' is set, then it gets the follower_ids for each of the crawled users
         """
 
-        rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers')
+        rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers', app=app)
+        quota_full = 0
 
         if not from_crawled:
-            df, _, _ = self.util.get_followers(rem_hits, reset_time, user_id, screen_name, levels)
+            df, *rest = self.util.get_followers(rem_hits, reset_time, user_id, screen_name, levels)
             try:
                 self.to_crawl.insert_many(df, ordered=False)
             except BulkWriteError:
@@ -220,32 +234,47 @@ class Crawler:
             cur = self.crawled.find(no_cursor_timeout=True)
             while True:
                 log.debug('top: rem_hits: {}, reset_time: {}, now: {}'.format(rem_hits, reset_time, time.time()))
-                if (rem_hits > 0) and (time.time() < reset_time):
+                if rem_hits > 0:
                     try:
                         _id = next(cur).get('_id')
                     except StopIteration:
                         cur.close()
                         break
 
-                    df, rem_hits, reset_time = self.util.get_followers(rem_hits, reset_time, user_id=_id, levels=levels)
+                    df, rem_hits, reset_time, app = self.util.get_followers(rem_hits, reset_time, user_id=_id,
+                                                                                levels=levels, app=app)
 
                     try:
                         self.to_crawl.insert_many(df, ordered=False)
                     except BulkWriteError:
                         log.warning('some user_ids seem to already exist...')
+
+                    quota_full = 0
+
                 else:
-                    sleep = reset_time - time.time()
-                    wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
-                    log.info('Followers_crawl: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
+                    app += 1
+                    quota_full += 1
+                    if app % self.tot_tokens == 0:
+                        app = 0
+
+                    if quota_full == self.tot_tokens:
+                        sleep = 15 * 60
+                        wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
+                        log.info('user_lookup: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
                                                                                                     wakeup_time))
-                    # Sleep for one more second to wait for the reset of the limits
-                    time.sleep(sleep+1)
-                    rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers')
+                        # Sleep for one more second to wait for the reset of the limits
+                        time.sleep(sleep+1)
+                        quota_full = 0
+
+                    rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers', app=app)
+                    log.debug('\n\n switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app, rem_hits,
+                                                                                                        reset_time))
+
 
             log.debug("fetched followers for ids in 'crawled' upto level: {}".format(levels))
 
 
-    def crawl(self, top_users=False, only_new=False):
+    def crawl(self, top_users=False, only_new=False, app=0):
         """ Efficient crawl for twitter timelines.
 
             'top_users' - crawl tweets for top 1000 twitteratis listed at "http://tvitre.no/norsktoppen"
@@ -265,7 +294,8 @@ class Crawler:
                 self.store_in_db(collection='buffer')
 
             # Empty the buffer collection first...
-            self.empty_buffer()
+            self.empty_buffer(app=app)
+
         else:
             only_new_cursor = self.crawled.find()
 
@@ -285,12 +315,14 @@ class Crawler:
             if not (screen_name or user_id):
                 break
 
-            log.info('crawling for "{}"'.format(screen_name if screen_name else user_id))
-            rem_hits, reset_time = self.util.check_rate_limit_status()
+            log.info('crawling for "{}"'.format(user_id if user_id else screen_name))
 
-            while time.time() < reset_time:
+            rem_hits, reset_time = self.util.check_rate_limit_status(app=app)
+            quota_full = 0
+
+            while True:
                 if rem_hits > 0:
-                    resp = self._get_timeline(screen_name, user_id)
+                    resp = self._get_timeline(screen_name, user_id, app=app)
                     rem_hits -= 1
 
                     if resp != '[]' and resp is not None:
@@ -307,18 +339,26 @@ class Crawler:
                         break
 
                     time.sleep(.01)
+                    quota_full = 0
 
                 else:
-                    interm_hits, interm_time = self.util.check_rate_limit_status()
-                    if interm_time > reset_time:
-                        rem_hits, reset_time = interm_hits, interm_time
-                    else:
-                        sleep = interm_time - time.time()
+                    app += 1
+                    quota_full += 1
+                    if app % self.tot_tokens == 0:
+                        app = 0
+
+                    if quota_full == self.tot_tokens:
+                        sleep = 15 * 60
                         wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
-                        log.info('sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2), wakeup_time))
+                        log.info('crawl: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
+                                                                                                    wakeup_time))
                         # Sleep for one more second to wait for the reset of the limits
                         time.sleep(sleep+1)
-                        rem_hits, reset_time = self.util.check_rate_limit_status()
+                        quota_full = 0
+
+                    rem_hits, reset_time = self.util.check_rate_limit_status(app=app)
+                    log.debug('\n\n switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app,
+                                                                                            rem_hits, reset_time))
 
         log.info('exiting...\n\n')
 
@@ -459,8 +499,9 @@ if __name__ == "__main__":
                         exclude_replies=args.noExReps, contributor_details=args.contrib, include_rts=args.retweets,
                         db=args.db, host=args.host, port=args.port, collection=args.collection, pref_langs=args.lang)
 
-        # crawler.crawl(top_users=True)
-        crawler.fill_with_followers(user_id=141968149, levels=2)
+        # crawler.crawl()
+        # crawler.crawl(only_new=True)
+        crawler.fill_with_followers(from_crawled=True, levels=2)
 
     except:
         log.exception('Error !!! Closing down DB connections, if any..')
