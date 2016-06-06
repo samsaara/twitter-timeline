@@ -299,6 +299,8 @@ class Crawler:
         else:
             only_new_cursor = self.crawled.find()
 
+        rem_hits, reset_time = self.util.check_rate_limit_status(app=app)
+
         while True:
             self.max_id, self.since_id = None, None
 
@@ -316,8 +318,6 @@ class Crawler:
                 break
 
             log.info('crawling for "{}"'.format(user_id if user_id else screen_name))
-
-            rem_hits, reset_time = self.util.check_rate_limit_status(app=app)
             quota_full = 0
 
             while True:
