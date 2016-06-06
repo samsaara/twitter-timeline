@@ -267,8 +267,8 @@ class Crawler:
                         quota_full = 0
 
                     rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers', app=app)
-                    log.debug('\n\n switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app, rem_hits,
-                                                                                                        reset_time))
+                    log.debug('\n\n Followers: switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app,
+                                                                                            rem_hits, reset_time))
 
 
             log.debug("fetched followers for ids in 'crawled' upto level: {}".format(levels))
