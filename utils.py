@@ -81,7 +81,7 @@ class Util:
 
         resp = None
         try:
-            log.debug('fetching rate_limit_status...')
+            log.info('fetching rate_limit_status...')
             with urllib.request.urlopen(req) as op:
                 resp = op.read()
         except:

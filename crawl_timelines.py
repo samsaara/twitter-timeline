@@ -22,7 +22,7 @@ import logging
 logging.basicConfig(filename="crawler.log", level=logging.DEBUG,
                     format='%(levelname)s: %(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S')
 log = logging.getLogger()
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 class Crawler:
@@ -136,7 +136,7 @@ class Crawler:
             #     self.df.id_str = self.df.id_str.astype(str)
 
             self.df.rename(columns={'id':'_id'}, inplace=True)
-            log.debug('Got {} tweets'.format(len(self.df)))
+            log.info('Got {} tweets'.format(len(self.df)))
 
             self.df = self.df.to_dict(orient='records')
 
@@ -184,7 +184,7 @@ class Crawler:
                     quota_full = 0
 
                 rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup', app=app)
-                log.debug('\n\n switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app, rem_hits,
+                log.info('\n\n buffer: switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app, rem_hits,
                                                                                                     reset_time))
 
         log.debug('"buffer" emptied...')
@@ -357,8 +357,8 @@ class Crawler:
                         quota_full = 0
 
                     rem_hits, reset_time = self.util.check_rate_limit_status(app=app)
-                    log.debug('\n\n switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app,
-                                                                                            rem_hits, reset_time))
+                    log.info('\n\n crawl: switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app,
+                                                                                    rem_hits, time.ctime(reset_time)))
 
         log.info('exiting...\n\n')
 
