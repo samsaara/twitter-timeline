@@ -4,3 +4,4 @@ tdb = client.twitter
 tcol = tdb.timeline
 toc = tdb.to_crawl
 crld = tdb.crawled
+buf = tdb.buffer
