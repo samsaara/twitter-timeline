@@ -211,24 +211,26 @@ class Crawler:
                 return None, None
 
 
-    def fill_with_followers(self, user_id=None, screen_name=None, from_crawled=False, levels=1, app=0):
-        """ Get the followers' userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for any given
-            user. Specify 'levels=-1' for that...
+    def fill_with_people(self, user_id=None, screen_name=None, from_crawled=False, levels=1, app=0, people='followers'):
+        """ Get the followers' / friends' userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for
+            any given user. Specify 'levels=-1' for that...
 
-            If 'from_crawled' is set, then it gets the follower_ids for each of the crawled users
+            people: 'friends' / 'followers'
+
+            If 'from_crawled' is set, then it gets the follower_ids / friends_ids for each of the crawled users
         """
 
-        rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers', app=app)
+        rem_hits, reset_time = self.util.check_rate_limit_status(criteria=people, app=app)
         quota_full = 0
 
         if not from_crawled:
-            df, *rest = self.util.get_followers(rem_hits, reset_time, user_id, screen_name, levels)
+            df, *rest = self.util.get_people(rem_hits, reset_time, user_id, screen_name, levels, people=people)
             try:
                 self.to_crawl.insert_many(df, ordered=False)
             except BulkWriteError:
                 log.warning('some user_ids seem to already exist...')
 
-            log.debug('added followers of user {} to DB'.format(screen_name if screen_name else user_id))
+            log.debug('added {} of user {} to DB'.format(people, screen_name if screen_name else user_id))
 
         else:
             cur = self.crawled.find(no_cursor_timeout=True)
@@ -241,8 +243,8 @@ class Crawler:
                         cur.close()
                         break
 
-                    df, rem_hits, reset_time, app = self.util.get_followers(rem_hits, reset_time, user_id=_id,
-                                                                                levels=levels, app=app)
+                    df, rem_hits, reset_time, app = self.util.get_people(rem_hits, reset_time, user_id=_id,
+                                                                        levels=levels, app=app, people=people)
 
                     try:
                         self.to_crawl.insert_many(df, ordered=False)
@@ -266,12 +268,12 @@ class Crawler:
                         time.sleep(sleep+1)
                         quota_full = 0
 
-                    rem_hits, reset_time = self.util.check_rate_limit_status(criteria='followers', app=app)
-                    log.debug('\n\n Followers: switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app,
+                    rem_hits, reset_time = self.util.check_rate_limit_status(criteria=people, app=app)
+                    log.debug('\n\n People: switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app,
                                                                                             rem_hits, reset_time))
 
 
-            log.debug("fetched followers for ids in 'crawled' upto level: {}".format(levels))
+            log.debug("fetched {} for ids in 'crawled' upto level: {}".format(people, levels))
 
 
     def crawl(self, top_users=False, only_new=False, app=0):

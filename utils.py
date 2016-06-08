@@ -72,7 +72,7 @@ class Util:
             'timeline / user_lookup / follower ids'
         """
 
-        dc = {'timeline':'statuses', 'user_lookup':'users', 'followers':'followers'}
+        dc = {'timeline':'statuses', 'user_lookup':'users', 'followers':'followers', 'friends':'friends'}
         url = '{}/application/rate_limit_status.json?resources={}'.format(self.BASE_URL, dc.get(criteria))
 
         auth = 'Bearer {}'.format(self.ACCESS_TOKENS[app])
@@ -96,6 +96,8 @@ class Util:
             limits = resp['resources']['users']['/users/lookup']
         elif criteria == 'followers':
             limits = resp['resources']['followers']['/followers/ids']
+        elif criteria == 'friends':
+            limits = resp['resources']['friends']['/friends/ids']
 
         rem_hits, reset_time = limits.get('remaining'), limits.get('reset')
 
@@ -142,9 +144,10 @@ class Util:
         return df.to_dict(orient='records')
 
 
-    def get_followers(self, rem_hits, reset_time, user_id=None, screen_name=None, levels=-1, app=0):
-        """ Get the followers' userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for any given
-            user. Specify 'levels=-1' for that...
+    def get_people(self, rem_hits, reset_time, user_id=None, screen_name=None, levels=-1, app=0, people='followers'):
+        """ Get the followers' / friends userids (in chunks of 5000 - each level: one chunk, max: 100K/ 20 chunks) for any given user. Specify 'levels=-1' for that...
+
+            People: 'followers' / 'friends'
         """
         quota_full = 0
         tot_tokens = len(self.ACCESS_TOKENS)
@@ -162,7 +165,7 @@ class Util:
                 break
 
             if rem_hits > 0:
-                url = '{}/followers/ids.json?cursor={}&{}={}&count=5000'.format(self.BASE_URL, cursor,
+                url = '{}/{}/ids.json?cursor={}&{}={}&count=5000'.format(self.BASE_URL, people, cursor,
                                         'user_id' if user_id else 'screen_name', user_id if user_id else screen_name)
                 auth = 'Bearer {}'.format(self.ACCESS_TOKENS[app])
                 header = {'Authorization': auth}
@@ -205,10 +208,10 @@ class Util:
                     quota_full = 0
 
                 rem_hits, reset_time = self.check_rate_limit_status(criteria='followers', app=app)
-                log.debug('\n\n Util.get_followers: swtiched to app: {}. New rem_hits: {}, reset_time: {} \
+                log.debug('\n\n Util.get_people: swtiched to app: {}. New rem_hits: {}, reset_time: {} \
                             \n\n'.format(app, rem_hits, reset_time))
 
-        log.debug('got {} followers for user: {}'.format(len(IDs), user_id if user_id else screen_name))
+        log.debug('got {} {} for user: {}'.format(len(IDs), people, user_id if user_id else screen_name))
         return pd.DataFrame(IDs, columns=['_id'], dtype=Int64).to_dict(orient='records'), rem_hits, reset_time, app
 
 
