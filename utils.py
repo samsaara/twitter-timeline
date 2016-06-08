@@ -209,7 +209,7 @@ class Util:
 
                 rem_hits, reset_time = self.check_rate_limit_status(criteria=people, app=app)
                 log.debug('\n\n Util.get_people: swtiched to app: {}. New rem_hits: {}, reset_time: {} \
-                            \n\n'.format(app, rem_hits, reset_time))
+                            \n\n'.format(app, rem_hits, time.ctime(reset_time)))
 
         log.debug('got {} {} for user: {}'.format(len(IDs), people, user_id if user_id else screen_name))
         return pd.DataFrame(IDs, columns=['_id'], dtype=Int64).to_dict(orient='records'), rem_hits, reset_time, app
