@@ -159,7 +159,7 @@ class Util:
         cursor = -1
         IDs = []
 
-        log.debug('fetching followers for user {}...'.format(user_id if user_id else screen_name))
+        log.debug('fetching {} for user {}...'.format(people, user_id if user_id else screen_name))
         while True:
             if not (level < levels and cursor != 0):
                 break

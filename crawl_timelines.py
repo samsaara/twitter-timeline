@@ -22,7 +22,7 @@ import logging
 logging.basicConfig(filename="crawler.log", level=logging.DEBUG,
                     format='%(levelname)s: %(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S')
 log = logging.getLogger()
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 
 
 class Crawler:
