@@ -252,6 +252,7 @@ class Crawler:
                         log.warning('some user_ids seem to already exist...')
 
                     quota_full = 0
+                    time.sleep(.01)
 
                 else:
                     app += 1
