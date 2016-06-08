@@ -348,7 +348,7 @@ class Crawler:
                         app = 0
 
                     if quota_full == self.tot_tokens:
-                        sleep = 5 * 60
+                        sleep = 2 * 60
                         wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
                         log.info('crawl: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
                                                                                                     wakeup_time))
