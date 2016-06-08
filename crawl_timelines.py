@@ -247,7 +247,7 @@ class Crawler:
                                                                         levels=levels, app=app, people=people)
 
                     try:
-                        self.to_crawl.insert_many(df, ordered=False)
+                        self.to_crawl.insert_many(df, ordered=False) if len(df) else None
                     except BulkWriteError:
                         log.warning('some user_ids seem to already exist...')
 
