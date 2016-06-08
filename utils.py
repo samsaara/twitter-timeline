@@ -207,7 +207,7 @@ class Util:
                     time.sleep(sleep+1)
                     quota_full = 0
 
-                rem_hits, reset_time = self.check_rate_limit_status(criteria='followers', app=app)
+                rem_hits, reset_time = self.check_rate_limit_status(criteria=people, app=app)
                 log.debug('\n\n Util.get_people: swtiched to app: {}. New rem_hits: {}, reset_time: {} \
                             \n\n'.format(app, rem_hits, reset_time))
 
