@@ -340,7 +340,7 @@ class Crawler:
                         self.store_in_db() if store else None
                         total_tweets += len(self.df)
                     else:
-                        log.info('crawling finished for user {}'.format(user_id if user_id else screen_name ))
+                        log.info('crawling finished for user {} with {} tweets'.format(user_id if user_id else screen_name, total_tweets))
                         if only_new:
                             break
 
