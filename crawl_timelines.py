@@ -185,7 +185,7 @@ class Crawler:
 
                 rem_hits, reset_time = self.util.check_rate_limit_status(criteria='user_lookup', app=app)
                 log.info('\n\n buffer: switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app, rem_hits,
-                                                                                                    reset_time))
+                                                                                        time.ctime(reset_time)))
 
         log.debug('"buffer" emptied...')
 
@@ -271,7 +271,7 @@ class Crawler:
 
                     rem_hits, reset_time = self.util.check_rate_limit_status(criteria=people, app=app)
                     log.debug('\n\n People: switched to app: {}. New rem_hits: {}, reset_time: {} \n\n'.format(app,
-                                                                                            rem_hits, reset_time))
+                                                                            rem_hits, time.ctime(reset_time)))
 
 
             log.debug("fetched {} for ids in 'crawled' upto level: {}".format(people, levels))
