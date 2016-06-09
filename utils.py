@@ -171,14 +171,13 @@ class Util:
                 header = {'Authorization': auth}
                 req = urllib.request.Request(url, headers=header)
                 resp = None
+                rem_hits -= 1
                 try:
                     with urllib.request.urlopen(req) as op:
                         resp = op.read()
                 except:
                     log.exception('Error in fetching the followers !!!')
                     break
-
-                rem_hits -= 1
 
                 if resp:
                     dc = ujson.loads(resp.decode('utf8'))
