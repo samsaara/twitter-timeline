@@ -11,15 +11,15 @@ In addition:
 * Remove the fields from the JSON response that you don't think are useful before storing them.
 
 # Note:
-This `test` branch is a bit more advanced and has more functionalities (listed below)... and is more suited for my needs. I don't plan to include all of these in `master` anytime soon but might incorporate some of the stuff from this into it. For now, feel free to tweak around. :)
+This `test` branch is more advanced and has more functionalities (listed below)... and is also more suited for my needs. I don't plan to include all of these in `master` anytime soon but might incorporate some of the stuff from this into it. For now, feel free to play around. :)
 
 Currently within this branch, you can fetch:
 * [Top 1000](http://tvitre.no/norsktoppen) Norwegian twitteratis and their tweets
 * Timelines of any public account maintaining twitteratis given by either their `screen_name` or `user_id`.
-* Their (👆) followers (Default-Max: 100K) & their tweets and so on...
+* *followers / friends* of 👆 (Default-Max: 100K) & their tweets and so on...
 * Only new / recent tweets that you haven't crawled since last time.
 * Supports **Multiple API Keys & Secrets**. The crawler switches the credentials whenever rate limits are reached for one of the API Key-Secret combinations...
-so as to wait less until the limits are reset. With sufficient API Key-Secret pairs (say 5, to be safe), it is possible to crawl without waiting. (The rate limits are still respected in all cases)
+so as to wait less until the limits are reset. With sufficient API Key-Secret pairs, it is possible to crawl without waiting. (The rate limits are still respected in all cases)
 
 You can also filter by your preferred language & JSON fields to store as mentioned above. 🙃
 
@@ -34,13 +34,17 @@ You can also filter by your preferred language & JSON fields to store as mention
 ...
 ```
 
- Do `pip install -r requirements.txt`
-
-
 # Usage:
-* ` $ python3 crawl_timelines.py --names 'elonmusk' `
-* ` $ python3 crawl_timelines.py --names 'isro, sachin_rt' --lang 'en, hi'`
-* ` $ python3 crawl_timelines.py --ids '2916305152, 20536157' --noFields 'geo, favorited, place' `
+```
+>>> from crawl_timelines import Crawler
+>>> crawler = Crawler()
+>>>
+>>> crawler.crawl(only_new=True)    # Crawl only recent tweets of already crawled users since last time
+>>>
+>>> # Fetch 'friends' / 'followers' of all users so far crawled.
+>>> crawler.fill_with_people(from_crawled=True, levels=-1, people='friends')
+>>> crawler.crawl()  # now crawl their timelines
+```
 
 # License:
 
