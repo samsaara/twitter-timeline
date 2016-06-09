@@ -27,7 +27,7 @@ log.setLevel(logging.DEBUG)
 # minimum tweets to be collected from a user's timeline before he/she could be added to 'crawled' collection
 # Useful for crawling their friends. If not many tweets, it is likely that his/her followers also doesn't tweet
 # in the preferred language
-MIN_TWEETS_THRESHOLD = 50
+MIN_TWEETS_THRESHOLD = 30
 
 
 class Crawler:
