@@ -24,6 +24,11 @@ logging.basicConfig(filename="crawler.log", level=logging.DEBUG,
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
+# minimum tweets to be collected from a user's timeline before he/she could be added to 'crawled' collection
+# Useful for crawling their friends. If not many tweets, it is likely that his/her followers also doesn't tweet
+# in the preferred language
+MIN_TWEETS_THRESHOLD = 50
+
 
 class Crawler:
 
@@ -322,6 +327,7 @@ class Crawler:
 
             log.info('crawling for "{}"'.format(user_id if user_id else screen_name))
             quota_full = 0
+            total_tweets = 0
 
             while True:
                 if rem_hits > 0:
@@ -332,12 +338,18 @@ class Crawler:
                         self.df = pd.read_json(resp)
                         store = self._clean_response()
                         self.store_in_db() if store else None
+                        total_tweets += len(self.df)
                     else:
-                        log.info('crawling finished for user {}'.format(screen_name if screen_name else user_id))
+                        log.info('crawling finished for user {}'.format(user_id if user_id else screen_name ))
                         if only_new:
                             break
 
-                        self.crawled.insert_one({'_id': user_id})
+                        # Insert only if he/she's worthy
+                        if total_tweets > MIN_TWEETS_THRESHOLD:
+                            self.crawled.insert_one({'_id': user_id})
+                        else:
+                            log.debug('not many tweets for user: {}. not inserting in "crawled"'.format(user_id if user_id else screen_name))
+
                         self.to_crawl.delete_one({'_id': user_id})
                         break
 
