@@ -1,5 +1,6 @@
 .DS_Store
 .credentials
+logs/
 crawler.log
 algo.txt
 nohup.out
