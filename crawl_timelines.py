@@ -523,7 +523,7 @@ if __name__ == "__main__":
         top_users_reversed = crawler.util.get_top_twitteratis()[::-1]
         app = 0
         for user in top_users_reversed:
-            app = crawler.fill_with_people(screen_name=user, people='friends', levels=1, app=app)
+            app = crawler.fill_with_people(screen_name=user.lstrip('@'), people='friends', levels=1, app=app)
 
     except:
         log.exception('Error !!! Closing down DB connections, if any..')
