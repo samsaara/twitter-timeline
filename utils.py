@@ -198,7 +198,7 @@ class Util:
                     app = 0
 
                 if quota_full == tot_tokens:
-                    sleep = 15 * 60
+                    sleep = 10 * 60
                     wakeup_time = pd.datetime.ctime(pd.datetime.now() + pd.Timedelta(sleep, 's'))
                     log.info('user_lookup: sleeping for {} minutes... waking up at: {}'.format(round(sleep/60, 2),
                                                                                                 wakeup_time))

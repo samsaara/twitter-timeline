@@ -229,13 +229,15 @@ class Crawler:
         quota_full = 0
 
         if not from_crawled:
-            df, *rest = self.util.get_people(rem_hits, reset_time, user_id, screen_name, levels, people=people)
+            df, *rest, app = self.util.get_people(rem_hits, reset_time, user_id, screen_name, levels, people=people)
             try:
                 self.to_crawl.insert_many(df, ordered=False)
             except BulkWriteError:
                 log.warning('some user_ids seem to already exist...')
 
             log.debug('added {} of user {} to DB'.format(people, screen_name if screen_name else user_id))
+
+            return app
 
         else:
             cur = self.crawled.find(no_cursor_timeout=True)
@@ -516,7 +518,12 @@ if __name__ == "__main__":
 
         # crawler.crawl()
         # crawler.crawl(only_new=True)
-        crawler.fill_with_followers(from_crawled=True, levels=2)
+        # crawler.fill_with_people(screen_name='tweetsauce', levels=1, people='friends')
+
+        top_users_reversed = crawler.util.get_top_twitteratis()[::-1]
+        app = 0
+        for user in top_users_reversed:
+            app = crawler.fill_with_people(screen_name=user.lstrip('@'), people='friends', levels=1, app=app)
 
     except:
         log.exception('Error !!! Closing down DB connections, if any..')
