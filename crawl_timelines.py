@@ -347,12 +347,7 @@ class Crawler:
                         if only_new:
                             break
 
-                        # Insert only if he/she's worthy
-                        if total_tweets > MIN_TWEETS_THRESHOLD:
-                            self.crawled.insert_one({'_id': user_id})
-                        else:
-                            log.debug('not many tweets for user: {}. not inserting in "crawled"'.format(user_id if user_id else screen_name))
-
+                        self.crawled.insert_one({'_id': user_id})
                         self.to_crawl.delete_one({'_id': user_id})
                         break
 
