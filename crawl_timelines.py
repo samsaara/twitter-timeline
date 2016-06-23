@@ -229,7 +229,8 @@ class Crawler:
         quota_full = 0
 
         if not from_crawled:
-            df, *rest, app = self.util.get_people(rem_hits, reset_time, user_id, screen_name, levels, people=people)
+            df, *rest, app = self.util.get_people(rem_hits, reset_time, user_id, screen_name, levels, app=app,
+                                                    people=people)
             try:
                 if len(df):
                     self.to_crawl.insert_many(df, ordered=False)
