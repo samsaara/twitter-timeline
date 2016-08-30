@@ -121,7 +121,7 @@ class Crawler:
         self.max_id = self.df.id.min() - 1
         if self.pref_langs:
             # Extract only those tweets that are in one of preferred languages...
-            if 'lang' in df.columns:
+            if 'lang' in self.df.columns:
                 self.df = self.df[self.df.lang.isin(self.pref_langs)]
             else:
                 return False
